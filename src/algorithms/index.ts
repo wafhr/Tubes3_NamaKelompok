@@ -5,6 +5,12 @@ export {
   type KmpKeywordResult,
   type KmpSearchResult
 } from "./kmp";
+export {
+  searchRabinKarp,
+  searchRabinKarpKeywords,
+  type RabinKarpKeywordResult,
+  type RabinKarpSearchResult
+} from "./rabinKarp";
 export { searchRegex } from "./regexMatcher";
 export type { AlgorithmStats, MatchResult, MatchingAlgorithm } from "./types";
 export {
