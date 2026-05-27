@@ -1,4 +1,10 @@
 export {
+  buildAhoCorasickAutomaton,
+  searchAhoCorasickKeywords,
+  type AhoCorasickAutomaton,
+  type AhoCorasickSearchResult
+} from "./ahoCorasick";
+export {
   buildKmpLpsTable,
   searchKmp,
   searchKmpKeywords,
