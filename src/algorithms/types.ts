@@ -21,3 +21,16 @@ export interface AlgorithmStats {
   matchCount: number;
   comparisons: number;
 }
+
+export interface DomMatchResult {
+  node: Text;
+  sourceText: string;
+  match: MatchResult;
+}
+
+interface KeywordAlgorithmStats {
+  matchCount: number;       
+  executionTimeMs: number;  
+}
+
+export type KeywordStats = Map<string, Map<MatchingAlgorithm, KeywordAlgorithmStats>>;
