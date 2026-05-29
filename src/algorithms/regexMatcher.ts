@@ -1,7 +1,7 @@
 import type { KeywordStats, MatchResult } from "./types";
 import { measureExecution } from "../utils/timer";
 
-const WORD_WITH_DIGITS_PATTERN = /(?<![\p{L}\p{N}_])\p{L}[\p{L}\p{M}]{3,}\p{N}{2,}(?![\p{L}\p{N}_])/gu;
+const WORD_WITH_DIGITS_PATTERN = /(?<![\p{L}\p{N}_])\p{L}[\p{L}\p{M}]*\p{N}{2,}(?![\p{L}\p{N}_])/gu;
 
 function findRegexMatches(text: string): MatchResult[] {
   const matches: MatchResult[] = [];
