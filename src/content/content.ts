@@ -320,8 +320,8 @@ async function runSearch(settings: JudolSettings): Promise<void> {
   const totalExactMatches = 
     kmpResult.matches.length + 
     boyerMooreResult.matches.length + 
-    (ahoResult?.matches.length ?? 0) + 
-    (rabinKarpResult?.matches.length ?? 0);
+    (ahoResult?.matches?.length ?? 0) + 
+    (rabinKarpResult?.matches?.length ?? 0);
 
   let fuzzyResult = null;
   let fuzzyExecutionTimeMs = 0;
