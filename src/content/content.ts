@@ -50,6 +50,12 @@ export interface RabinKarpDomScanResult {
   scannedNodeCount: number;
 }
 
+interface TextScanSegment {
+  node: Text;
+  text: string;
+  startIndex: number;
+}
+
 export function scanTextNodesWithKmp(
   textNodes: readonly TextNodeInfo[],
   keywords: readonly string[],
@@ -139,23 +145,31 @@ export function scanTextNodesWithRegex(textNodes: readonly TextNodeInfo[], keySt
 export function scanTextNodesWithWeightedLevenshtein(
   textNodes: readonly TextNodeInfo[],
   keywords: readonly string[],
-  keyStat: KeywordStats
+  keyStat: KeywordStats,
+  exactMatches: readonly DomMatchResult[] = []
 ): WeightedLevenshteinDomScanResult {
   const matches: DomMatchResult[] = [];
   let comparisons = 0;
+  const textSegments = collectUnmatchedTextSegments(textNodes, exactMatches);
 
-  for (const textNode of textNodes) {
-    const normalizedText = normalizeTextForExactSearch(textNode.text);
+  for (const segment of textSegments) {
+    const normalizedText = normalizeTextForExactSearch(segment.text);
     const result = searchWeightedLevenshteinKeywords(normalizedText, keywords, keyStat);
     comparisons += result.comparisons;
 
     for (const match of result.matches) {
+      const startIndex = segment.startIndex + match.startIndex;
+      const endIndex = segment.startIndex + match.endIndex;
+      const sourceText = segment.node.data ?? segment.text;
+
       matches.push({
-        node: textNode.node,
-        sourceText: textNode.text,
+        node: segment.node,
+        sourceText,
         match: {
           ...match,
-          matchedText: textNode.text.slice(match.startIndex, match.endIndex)
+          startIndex,
+          endIndex,
+          matchedText: sourceText.slice(startIndex, endIndex)
         }
       });
     }
@@ -166,6 +180,87 @@ export function scanTextNodesWithWeightedLevenshtein(
     comparisons,
     scannedNodeCount: textNodes.length
   };
+}
+
+function collectUnmatchedTextSegments(
+  textNodes: readonly TextNodeInfo[],
+  exactMatches: readonly DomMatchResult[]
+): TextScanSegment[] {
+  if (exactMatches.length === 0) {
+    return textNodes.map((textNode) => ({
+      node: textNode.node,
+      text: textNode.text,
+      startIndex: 0
+    }));
+  }
+
+  const exactRangesByNode = new Map<Text, Array<{ startIndex: number; endIndex: number }>>();
+
+  for (const { node, match } of exactMatches) {
+    if (!exactRangesByNode.has(node)) {
+      exactRangesByNode.set(node, []);
+    }
+
+    exactRangesByNode.get(node)!.push({
+      startIndex: match.startIndex,
+      endIndex: match.endIndex
+    });
+  }
+
+  const segments: TextScanSegment[] = [];
+
+  for (const textNode of textNodes) {
+    const ranges = exactRangesByNode.get(textNode.node);
+
+    if (!ranges || ranges.length === 0) {
+      segments.push({
+        node: textNode.node,
+        text: textNode.text,
+        startIndex: 0
+      });
+      continue;
+    }
+
+    const normalizedRanges = ranges
+      .map((range) => ({
+        startIndex: Math.max(0, Math.min(textNode.text.length, range.startIndex)),
+        endIndex: Math.max(0, Math.min(textNode.text.length, range.endIndex))
+      }))
+      .filter((range) => range.startIndex < range.endIndex)
+      .sort((left, right) => left.startIndex - right.startIndex || left.endIndex - right.endIndex);
+
+    let segmentStartIndex = 0;
+
+    for (const range of normalizedRanges) {
+      if (range.startIndex > segmentStartIndex) {
+        const text = textNode.text.slice(segmentStartIndex, range.startIndex);
+
+        if (text.trim().length > 0) {
+          segments.push({
+            node: textNode.node,
+            text,
+            startIndex: segmentStartIndex
+          });
+        }
+      }
+
+      segmentStartIndex = Math.max(segmentStartIndex, range.endIndex);
+    }
+
+    if (segmentStartIndex < textNode.text.length) {
+      const text = textNode.text.slice(segmentStartIndex);
+
+      if (text.trim().length > 0) {
+        segments.push({
+          node: textNode.node,
+          text,
+          startIndex: segmentStartIndex
+        });
+      }
+    }
+  }
+
+  return segments;
 }
 
 export function scanTextNodesWithAhoCorasick(
@@ -320,16 +415,20 @@ async function runSearch(settings: JudolSettings): Promise<void> {
     );
   }
 
-  const totalExactMatches = 
-    kmpResult.matches.length + 
-    boyerMooreResult.matches.length + 
-    (ahoResult?.matches?.length ?? 0) + 
-    (rabinKarpResult?.matches?.length ?? 0);
+  const exactMatches = [
+    ...kmpResult.matches,
+    ...boyerMooreResult.matches,
+    ...(ahoResult?.matches ?? []),
+    ...(rabinKarpResult?.matches ?? [])
+  ];
+  const hasUnmatchedText = collectUnmatchedTextSegments(textNodes, exactMatches).length > 0;
 
   let fuzzyResult = null;
   let fuzzyExecutionTimeMs = 0;
-  if (totalExactMatches === 0) {
-    const fuzzyExecution = measureExecution(() => scanTextNodesWithWeightedLevenshtein(textNodes, keywords, keyStat));
+  if (hasUnmatchedText) {
+    const fuzzyExecution = measureExecution(() =>
+      scanTextNodesWithWeightedLevenshtein(textNodes, keywords, keyStat, exactMatches)
+    );
     fuzzyResult = fuzzyExecution.result;
     fuzzyExecutionTimeMs = fuzzyExecution.executionTimeMs;
 
@@ -342,7 +441,7 @@ async function runSearch(settings: JudolSettings): Promise<void> {
     );
     console.info(`[${EXTENSION_NAME}] Weighted Levenshtein search finished: ${fuzzyResult.matches.length} matches, execTime ${fuzzyExecutionTimeMs.toFixed(3)} ms`);
   } else {
-    console.info(`[${EXTENSION_NAME}] Weighted Levenshtein search skipped because exact matches were found`);
+    console.info(`[${EXTENSION_NAME}] Weighted Levenshtein search skipped because all text was covered by exact matches`);
   }
 
   console.info(
