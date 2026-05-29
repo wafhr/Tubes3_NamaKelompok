@@ -1,0 +1,236 @@
+.judol-highlight {
+  background-color: rgba(255, 214, 10, 0.42);
+  border-bottom: 2px solid #f77f00;
+  border-radius: 2px;
+  box-decoration-break: clone;
+  color: inherit;
+  cursor: help;
+  transition: background-color 0.2s ease;
+}
+
+.judol-tooltip {
+  position: absolute;
+  z-index: 2147483647;
+  max-width: 280px;
+  min-width: 220px;
+  padding: 8px 10px;
+  border: 1px solid rgba(28, 28, 28, 0.14);
+  border-radius: 6px;
+  background-color: #1f2933;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+  color: #ffffff;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+.judol-tooltip[hidden] {
+  display: none;
+}
+
+.judol-tooltip-section {
+  margin-bottom: 8px;
+}
+
+.judol-tooltip-section:last-child {
+  margin-bottom: 0;
+}
+
+.judol-tooltip-title {
+  font-weight: 700;
+}
+
+.judol-tooltip-title-exact {
+  color: #ff6b35;
+}
+
+.judol-tooltip-title-regex {
+  color: #ffd166;
+}
+
+.judol-tooltip-title-fuzzy {
+  color: #66d9ef;
+}
+
+.judol-tooltip-code {
+  padding: 2px 4px;
+  border-radius: 4px;
+  background-color: rgba(255, 255, 255, 0.12);
+  color: inherit;
+  font-family: Consolas, Monaco, monospace;
+}
+
+.judol-tooltip-found-text {
+  color: #cbd5e1;
+  text-decoration: line-through;
+}
+
+.judol-tooltip-divider {
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+  margin: 8px 0;
+}
+
+.judol-popup {
+  width: 360px;
+  min-width: 320px;
+  max-width: 380px;
+  padding: 14px;
+  background-color: #ffffff;
+  color: #1f2933;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.judol-popup h1,
+.judol-popup h2,
+.judol-popup p {
+  margin: 0;
+}
+
+.judol-popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.judol-popup-header h1 {
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.judol-popup-header p {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.judol-popup-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.judol-popup-summary div {
+  padding: 10px;
+  border: 1px solid rgba(31, 41, 51, 0.12);
+  border-radius: 8px;
+  background-color: #f8fafc;
+}
+
+.judol-popup-summary span {
+  display: block;
+  color: #64748b;
+  font-size: 11px;
+}
+
+.judol-popup-summary strong {
+  display: block;
+  margin-top: 2px;
+  color: #0f172a;
+  font-size: 20px;
+}
+
+.judol-popup-section {
+  margin-top: 14px;
+}
+
+.judol-popup-section h2 {
+  margin-bottom: 8px;
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.judol-bar-chart {
+  display: grid;
+  gap: 7px;
+}
+
+.judol-bar-row {
+  display: grid;
+  grid-template-columns: minmax(86px, 1fr) 120px 28px;
+  align-items: center;
+  gap: 8px;
+}
+
+.judol-bar-label {
+  overflow: hidden;
+  color: #334155;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.judol-bar-track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background-color: #e2e8f0;
+}
+
+.judol-bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background-color: #f77f00;
+}
+
+.judol-bar-value {
+  color: #0f172a;
+  font-size: 12px;
+  text-align: right;
+}
+
+.judol-stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.judol-stats-table th,
+.judol-stats-table td {
+  padding: 7px 6px;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: left;
+}
+
+.judol-stats-table th {
+  color: #64748b;
+  font-weight: 700;
+}
+
+.judol-stats-table td:nth-child(2),
+.judol-stats-table td:nth-child(3) {
+  text-align: right;
+}
+
+.judol-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  color: #334155;
+}
+
+.judol-toggle input {
+  width: 18px;
+  height: 18px;
+  accent-color: #f77f00;
+}
+
+.judol-empty-state {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.judol-container-blur {
+  filter: blur(5px) !important;
+  pointer-events: auto; 
+  transition: filter 0.3s ease;
+}
+
+.judol-container-blur:hover {
+  filter: blur(1px) !important;
+}
