@@ -13,6 +13,7 @@
     {
       "matches": ["<all_urls>"],
       "js": ["content.js"],
+      "css": ["judol.css"],
       "run_at": "document_idle"
     }
   ],

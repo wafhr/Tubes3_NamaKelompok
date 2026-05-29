@@ -4,11 +4,64 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Judol Detector</title>
+    <link rel="stylesheet" href="judol.css" />
   </head>
   <body>
-    <main>
-      <h1>Judol Detector</h1>
-      <p>ini popup, extension aktif</p>
+    <main class="judol-popup">
+      <header class="judol-popup-header">
+        <div>
+          <h1>Judol Detector</h1>
+          <p id="search-meta">Belum ada scan</p>
+        </div>
+      </header>
+
+      <section class="judol-popup-summary" aria-label="Ringkasan scan">
+        <div>
+          <span>Total Keyword</span>
+          <strong id="total-keywords">0</strong>
+        </div>
+        <div>
+          <span>Total Match</span>
+          <strong id="total-matches">0</strong>
+        </div>
+      </section>
+
+      <section class="judol-popup-section">
+        <h2>Keyword</h2>
+        <div id="keyword-chart" class="judol-bar-chart"></div>
+      </section>
+
+      <section class="judol-popup-section">
+        <h2>Algoritma</h2>
+        <table class="judol-stats-table">
+          <thead>
+            <tr>
+              <th>Algoritma</th>
+              <th>Match</th>
+              <th>Waktu</th>
+              <th>Perbandingan</th>
+            </tr>
+          </thead>
+          <tbody id="algorithm-table"></tbody>
+        </table>
+      </section>
+
+      <section class="judol-popup-section">
+        <h2>Kontrol</h2>
+        <label class="judol-toggle">
+          <span>Blur teks terdeteksi</span>
+          <input id="blur-toggle" type="checkbox" />
+        </label>
+        <label class="judol-toggle">
+          <span>Aho-Corasick</span>
+          <input id="aho-toggle" type="checkbox" />
+        </label>
+        <label class="judol-toggle">
+          <span>Rabin-Karp</span>
+          <input id="rabin-toggle" type="checkbox" />
+        </label>
+      </section>
     </main>
+    <script type="module" src="popup.js"></script>
   </body>
 </html>
