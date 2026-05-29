@@ -11,6 +11,9 @@ import type { JudolSettings, StoredSearchStats } from "../utils/storage";
 import { measureExecution } from "../utils/timer";
 import { normalizeTextForExactSearch } from "../utils/textNormalizer";
 
+const DOM_RESCAN_DEBOUNCE_MS = 800;
+const TOOLTIP_SELECTOR = "#ext-judol-tooltip, .judol-tooltip";
+
 export interface KmpDomScanResult {
   matches: DomMatchResult[];
   comparisons: number;
@@ -369,19 +372,125 @@ async function runSearch(settings: JudolSettings): Promise<void> {
   console.info(`[${EXTENSION_NAME}] highlighted ${highlightedCount} DOM matches`);
 }
 
+function getObserverRoot(): HTMLElement {
+  return document.body ?? document.documentElement;
+}
+
+function isElementInsideTooltip(element: Element): boolean {
+  return element.closest(TOOLTIP_SELECTOR) !== null;
+}
+
+function isNodeInsideTooltip(node: Node): boolean {
+  if (node instanceof Element) {
+    return isElementInsideTooltip(node);
+  }
+
+  return node.parentElement !== null && isElementInsideTooltip(node.parentElement);
+}
+
+function isPageContentMutation(mutation: MutationRecord): boolean {
+  if (isNodeInsideTooltip(mutation.target)) {
+    return false;
+  }
+
+  if (mutation.type === "characterData") {
+    return true;
+  }
+
+  for (const node of mutation.addedNodes) {
+    if (!isNodeInsideTooltip(node)) {
+      return true;
+    }
+  }
+
+  for (const node of mutation.removedNodes) {
+    if (!isNodeInsideTooltip(node)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 async function initializeExtension(): Promise<void> {
-  const settings = await getSettings();
-  await runSearch(settings);
+  let currentSettings = await getSettings();
+  const observerRoot = getObserverRoot();
+  let rescanTimer: number | undefined;
+  let isSearchRunning = false;
+  let rerunAfterCurrentSearch = false;
+
+  const domObserver = new MutationObserver((mutations) => {
+    if (!mutations.some(isPageContentMutation)) {
+      return;
+    }
+
+    scheduleRescan("DOM changed");
+  });
+
+  const startObservingDom = (): void => {
+    domObserver.observe(observerRoot, {
+      childList: true,
+      characterData: true,
+      subtree: true
+    });
+  };
+
+  const stopObservingDom = (): void => {
+    domObserver.disconnect();
+  };
+
+  const clearScheduledRescan = (): void => {
+    if (rescanTimer !== undefined) {
+      window.clearTimeout(rescanTimer);
+      rescanTimer = undefined;
+    }
+  };
+
+  const runSearchWithObserverPaused = async (reason: string): Promise<void> => {
+    if (isSearchRunning) {
+      rerunAfterCurrentSearch = true;
+      return;
+    }
+
+    isSearchRunning = true;
+    clearScheduledRescan();
+    stopObservingDom();
+
+    try {
+      do {
+        rerunAfterCurrentSearch = false;
+        console.info(`[${EXTENSION_NAME}] search started: ${reason}`);
+        await runSearch(currentSettings);
+      } while (rerunAfterCurrentSearch);
+    } finally {
+      isSearchRunning = false;
+      startObservingDom();
+    }
+  };
+
+  function scheduleRescan(reason: string): void {
+    clearScheduledRescan();
+
+    rescanTimer = window.setTimeout(() => {
+      rescanTimer = undefined;
+
+      void runSearchWithObserverPaused(reason).catch((error: unknown) => {
+        console.error(`[${EXTENSION_NAME}] auto-rescan failed`, error);
+      });
+    }, DOM_RESCAN_DEBOUNCE_MS);
+  }
+
+  await runSearchWithObserverPaused("initial load");
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== "local" || !changes.judolSettings?.newValue) {
       return;
     }
 
-    const nextSettings = changes.judolSettings.newValue as JudolSettings;
-    setContainerCensorBlur(nextSettings.blurEnabled);
+    currentSettings = changes.judolSettings.newValue as JudolSettings;
+    setContainerCensorBlur(currentSettings.blurEnabled);
 
-    void runSearch(nextSettings).catch((error: unknown) => {
+    void runSearchWithObserverPaused("settings changed").catch((error: unknown) => {
       console.error(`[${EXTENSION_NAME}] rescan failed`, error);
     });
   });
