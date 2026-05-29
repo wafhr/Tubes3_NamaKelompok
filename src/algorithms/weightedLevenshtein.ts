@@ -1,4 +1,5 @@
-import type { MatchResult } from "./types";
+import type { KeywordStats, MatchResult } from "./types";
+import { measureExecution } from "../utils/timer";
 
 const INSERTION_COST = 1;
 const DELETION_COST = 1;
@@ -224,6 +225,7 @@ export function isFuzzyMatch(
 export function searchWeightedLevenshteinKeywords(
   text: string,
   keywords: readonly string[],
+  keyStat: KeywordStats,
   threshold: number = DEFAULT_SIMILARITY_THRESHOLD
 ): WeightedLevenshteinSearchResult {
   const textTokens = tokenizeText(text);
@@ -231,47 +233,81 @@ export function searchWeightedLevenshteinKeywords(
   let comparisons = 0;
 
   for (const keyword of keywords) {
-    const keywordTokens = tokenizeText(keyword);
-    const tokenCount = keywordTokens.length;
+    const { result, executionTimeMs: execTime } = measureExecution(() => {
+      // tambah keyStat
+      const keywordMatches: MatchResult[] = [];
+      let keywordComparisons = 0;
+      const keywordTokens = tokenizeText(keyword);
+      const tokenCount = keywordTokens.length;
 
-    if (tokenCount === 0 || tokenCount > textTokens.length) {
-      continue;
+      if (tokenCount === 0 || tokenCount > textTokens.length) {
+        return {
+          matches: keywordMatches,
+          comparisons: keywordComparisons
+        };
+      }
+
+      const comparableKeyword = joinTokenTexts(keywordTokens, 0, tokenCount);
+
+      for (let tokenIndex = 0; tokenIndex <= textTokens.length - tokenCount; tokenIndex += 1) {
+        const comparableCandidate = joinTokenTexts(textTokens, tokenIndex, tokenCount);
+
+        if (!hasNearbyLength(comparableKeyword, comparableCandidate)) {
+          continue;
+        }
+
+        const { distance, comparisons: distanceComparisons } = computeWeightedLevenshteinDistance(
+          comparableKeyword,
+          comparableCandidate
+        );
+        const maxLength = Math.max(
+          toComparableCharacters(comparableKeyword).length,
+          toComparableCharacters(comparableCandidate).length
+        );
+        const similarity = calculateSimilarityFromDistance(distance, maxLength);
+
+        keywordComparisons += distanceComparisons;
+
+        if (similarity >= threshold) {
+          const startIndex = textTokens[tokenIndex].startIndex;
+          const endIndex = textTokens[tokenIndex + tokenCount - 1].endIndex;
+
+          keywordMatches.push({
+            keyword,
+            algorithm: "Weighted Levenshtein",
+            startIndex,
+            endIndex,
+            matchedText: text.slice(startIndex, endIndex),
+            comparisons: distanceComparisons
+          });
+        }
+      }
+
+      return {
+        matches: keywordMatches,
+        comparisons: keywordComparisons
+      };
+    });
+
+    if (result.matches.length > 0) {
+      const algoKey = "Weighted Levenshtein";
+
+      if (!keyStat.has(keyword)) keyStat.set(keyword, new Map());
+
+      const algoMap = keyStat.get(keyword)!;
+      const prevCount = algoMap.get(algoKey)?.matchCount ?? 0;
+      const prevTime = algoMap.get(algoKey)?.executionTimeMs ?? 0;
+
+      algoMap.set(algoKey, {
+        matchCount: prevCount + result.matches.length,
+        executionTimeMs: prevTime + execTime
+      });
     }
 
-    const comparableKeyword = joinTokenTexts(keywordTokens, 0, tokenCount);
+    comparisons += result.comparisons;
 
-    for (let tokenIndex = 0; tokenIndex <= textTokens.length - tokenCount; tokenIndex += 1) {
-      const comparableCandidate = joinTokenTexts(textTokens, tokenIndex, tokenCount);
-
-      if (!hasNearbyLength(comparableKeyword, comparableCandidate)) {
-        continue;
-      }
-
-      const { distance, comparisons: distanceComparisons } = computeWeightedLevenshteinDistance(
-        comparableKeyword,
-        comparableCandidate
-      );
-      const maxLength = Math.max(
-        toComparableCharacters(comparableKeyword).length,
-        toComparableCharacters(comparableCandidate).length
-      );
-      const similarity = calculateSimilarityFromDistance(distance, maxLength);
-
-      comparisons += distanceComparisons;
-
-      if (similarity >= threshold) {
-        const startIndex = textTokens[tokenIndex].startIndex;
-        const endIndex = textTokens[tokenIndex + tokenCount - 1].endIndex;
-
-        matches.push({
-          keyword,
-          algorithm: "Weighted Levenshtein",
-          startIndex,
-          endIndex,
-          matchedText: text.slice(startIndex, endIndex),
-          comparisons: distanceComparisons
-        });
-      }
+    for (const match of result.matches) {
+      matches.push(match);
     }
   }
 

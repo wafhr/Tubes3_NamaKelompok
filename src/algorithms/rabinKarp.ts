@@ -1,4 +1,5 @@
-import type { MatchResult } from "./types";
+import type { MatchResult, KeywordStats } from "./types";
+import { measureExecution } from "../utils/timer";
 
 const HASH_BASE = 256;
 const HASH_MODULUS = 1_000_000_007;
@@ -125,13 +126,29 @@ export function searchRabinKarp(text: string, keyword: string): RabinKarpKeyword
   };
 }
 
-export function searchRabinKarpKeywords(text: string, keywords: readonly string[]): RabinKarpSearchResult {
+export function searchRabinKarpKeywords(text: string, keywords: readonly string[], keyStat: KeywordStats): RabinKarpSearchResult {
   const keywordResults: RabinKarpKeywordResult[] = [];
   const matches: MatchResult[] = [];
   let comparisons = 0;
 
   for (const keyword of keywords) {
-    const result = searchRabinKarp(text, keyword);
+    const { result: result, executionTimeMs: execTime } = measureExecution(() => searchRabinKarp(text, keyword));
+    
+    // tambah keyStat
+    if (result.matches.length > 0) {
+        const algoKey = "Rabin-Karp";
+
+        if (!keyStat.has(keyword)) keyStat.set(keyword, new Map());
+
+        const algoMap = keyStat.get(keyword)!;
+        const prevCount = algoMap.get(algoKey)?.matchCount ?? 0;
+        const prevTime = algoMap.get(algoKey)?.executionTimeMs ?? 0;
+
+        algoMap.set(algoKey, {
+            matchCount: prevCount + result.matches.length,
+            executionTimeMs: prevTime + execTime,
+        });
+    }
     keywordResults.push(result);
     comparisons += result.totalComparisons;
 

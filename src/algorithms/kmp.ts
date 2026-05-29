@@ -1,4 +1,5 @@
-import type { MatchResult } from "./types";
+import type { MatchResult, KeywordStats } from "./types";
+import { measureExecution } from "../utils/timer";
 
 export interface KmpKeywordResult {
   keyword: string;
@@ -97,13 +98,30 @@ export function searchKmp(text: string, keyword: string): KmpKeywordResult {
   };
 }
 
-export function searchKmpKeywords(text: string, keywords: readonly string[]): KmpSearchResult {
+export function searchKmpKeywords(text: string, keywords: readonly string[], keyStat: KeywordStats): KmpSearchResult {
   const keywordResults: KmpKeywordResult[] = [];
   const matches: MatchResult[] = [];
   let comparisons = 0;
 
   for (const keyword of keywords) {
-    const result = searchKmp(text, keyword);
+    const { result: result, executionTimeMs: execTime } = measureExecution(() => searchKmp(text, keyword));
+    
+    // tambah keyStat
+    if (result.matches.length > 0) {
+      const algoKey = "KMP";
+
+      if (!keyStat.has(keyword)) keyStat.set(keyword, new Map());
+
+      const algoMap = keyStat.get(keyword)!;
+      const prevCount = algoMap.get(algoKey)?.matchCount ?? 0;
+      const prevTime = algoMap.get(algoKey)?.executionTimeMs ?? 0;
+
+      algoMap.set(algoKey, {
+          matchCount: prevCount + result.matches.length,
+          executionTimeMs: prevTime + execTime,
+      });
+    }
+    
     keywordResults.push(result);
     comparisons += result.totalComparisons;
 

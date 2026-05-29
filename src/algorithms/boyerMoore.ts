@@ -1,4 +1,5 @@
-import type { MatchResult } from "./types";
+import type { MatchResult, KeywordStats } from "./types";
+import { measureExecution } from "../utils/timer";
 
 export interface BoyerMooreKeywordResult {
   keyword: string;
@@ -24,62 +25,97 @@ function buildLastOccurrence(pattern: string): Map<string, number>{
 export function searchBoyerMoore(text: string, keyword: string): BoyerMooreKeywordResult {
     const lastOccurrence = buildLastOccurrence(keyword);
     const matches: MatchResult[] = [];
-    const n = keyword.length;
 
-    let textIndex = n - 1;
-    let patternIndex = n - 1;
+    const n = keyword.length;
+    const m = text.length;
+
+    if (n === 0 || m < n) {
+        return {
+            keyword,
+            lastOccurrence,
+            searchComparisons: 0,
+            matches,
+        };
+    }
+
     let searchComparisons = 0;
 
-    while (textIndex < text.length) {
-        searchComparisons++;
-        
-        if (text[textIndex] === keyword[patternIndex]) {
-            textIndex--;
-            patternIndex--;
-        
-            if (patternIndex === -1) {
-                const startIndex = textIndex + 1;
-                const endIndex = textIndex + n;  
+    // posisi awal pattern pada text
+    let textIndex = 0;
 
-                matches.push({
+    while (textIndex <= m - n) {
+        let patternIndex = n - 1;
+
+        while (patternIndex >= 0) {
+            searchComparisons++;
+
+            if(keyword[patternIndex] === text[textIndex + patternIndex]) {
+                patternIndex--;
+            }else{
+                break;
+            }
+        }
+
+        // seluruh pattern cocok
+        if (patternIndex < 0) {
+            const startIndex = textIndex;
+            const endIndex = textIndex + n;
+
+            matches.push({
                 keyword,
                 algorithm: "Boyer-Moore",
                 startIndex,
                 endIndex,
                 matchedText: text.slice(startIndex, endIndex),
-                comparisons: searchComparisons
-                });
+                comparisons: searchComparisons,
+            });
 
-                textIndex += endIndex + 1;
-                patternIndex = n - 1;
-            }
-        }else{
-            const x = lastOccurrence.get(text[textIndex]) ?? -1;
-            textIndex += n - Math.min(patternIndex, 1 + x);
-            patternIndex = n - 1;
+            textIndex += n;
+        } else {
+            const x = lastOccurrence.get(text[textIndex + patternIndex]) ?? -1;
+            const shift = Math.max(1, patternIndex - x);
+            textIndex += shift;
         }
     }
+
     return {
         keyword,
         lastOccurrence,
         searchComparisons,
-        matches
+        matches,
     };
 }
 
-export function searchBoyerMooreKeywords(text: string, keywords: readonly string[]): BoyerMooreSearchResult {
+export function searchBoyerMooreKeywords(text: string, keywords: readonly string[], keyStat: KeywordStats): BoyerMooreSearchResult {
   const keywordResults: BoyerMooreKeywordResult[] = [];
   const matches: MatchResult[] = [];
   let comparisons = 0;
 
   for (const keyword of keywords) {
-    const result = searchBoyerMoore(text, keyword);
-    keywordResults.push(result);
-    comparisons += result.searchComparisons;
+    const { result: result, executionTimeMs: execTime } = measureExecution(() => searchBoyerMoore(text, keyword));
 
-    for (const match of result.matches) {
-      matches.push(match);
+    // tambah keyStat
+    if (result.matches.length > 0) {
+        const algoKey = "Boyer-Moore";
+
+        if (!keyStat.has(keyword)) keyStat.set(keyword, new Map());
+
+        const algoMap = keyStat.get(keyword)!;
+        const prevCount = algoMap.get(algoKey)?.matchCount ?? 0;
+        const prevTime = algoMap.get(algoKey)?.executionTimeMs ?? 0;
+
+        algoMap.set(algoKey, {
+            matchCount: prevCount + result.matches.length,
+            executionTimeMs: prevTime + execTime,
+        });
     }
+    
+        keywordResults.push(result);
+        comparisons += result.searchComparisons;
+
+        for (const match of result.matches) {
+        matches.push(match);
+        }
   }
 
   return {
