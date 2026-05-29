@@ -4,7 +4,8 @@ export type MatchingAlgorithm =
   | "Regex"
   | "Weighted Levenshtein"
   | "Aho-Corasick"
-  | "Rabin-Karp";
+  | "Rabin-Karp"
+  | "OCR";
 
 export interface MatchResult {
   keyword: string;

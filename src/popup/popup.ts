@@ -15,7 +15,8 @@ const ALGORITHM_ORDER: MatchingAlgorithm[] = [
   "Regex",
   "Aho-Corasick",
   "Rabin-Karp",
-  "Weighted Levenshtein"
+  "Weighted Levenshtein",
+  "OCR"
 ];
 
 function getElement<T extends HTMLElement>(id: string): T {
@@ -143,6 +144,7 @@ function renderSettings(settings: JudolSettings): void {
   getElement<HTMLInputElement>("blur-toggle").checked = settings.blurEnabled;
   getElement<HTMLInputElement>("aho-toggle").checked = settings.ahoCorasickEnabled;
   getElement<HTMLInputElement>("rabin-toggle").checked = settings.rabinKarpEnabled;
+  getElement<HTMLInputElement>("ocr-toggle").checked = settings.ocrEnabled;
 }
 
 async function updateSettings(patch: Partial<JudolSettings>): Promise<void> {
@@ -164,6 +166,10 @@ function bindSettingsControls(): void {
 
   getElement<HTMLInputElement>("rabin-toggle").addEventListener("change", (event) => {
     void updateSettings({ rabinKarpEnabled: (event.currentTarget as HTMLInputElement).checked });
+  });
+
+  getElement<HTMLInputElement>("ocr-toggle").addEventListener("change", (event) => {
+    void updateSettings({ ocrEnabled: (event.currentTarget as HTMLInputElement).checked });
   });
 }
 

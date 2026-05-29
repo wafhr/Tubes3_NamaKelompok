@@ -234,3 +234,17 @@
 .judol-container-blur:hover {
   filter: blur(1px) !important;
 }
+
+.judol-ocr-detected {
+  outline: 3px solid rgba(247, 127, 0, 0.72) !important;
+  outline-offset: 2px !important;
+}
+
+.judol-ocr-blur {
+  filter: blur(6px) !important;
+  transition: filter 0.3s ease;
+}
+
+.judol-ocr-blur:hover {
+  filter: blur(1px) !important;
+}

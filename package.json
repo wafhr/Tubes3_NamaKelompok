@@ -9,6 +9,9 @@
     "build": "vite build --config vite.content.config.ts && vite build --config vite.popup.config.ts",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "tesseract.js": "^6.0.1"
+  },
   "devDependencies": {
     "@types/chrome": "^0.0.302",
     "@types/node": "^22.15.19",

@@ -27,12 +27,14 @@ export interface JudolSettings {
   blurEnabled: boolean;
   ahoCorasickEnabled: boolean;
   rabinKarpEnabled: boolean;
+  ocrEnabled: boolean;
 }
 
 export const DEFAULT_SETTINGS: JudolSettings = {
   blurEnabled: false,
   ahoCorasickEnabled: false,
-  rabinKarpEnabled: false
+  rabinKarpEnabled: false,
+  ocrEnabled: false
 };
 
 export async function getSettings(): Promise<JudolSettings> {

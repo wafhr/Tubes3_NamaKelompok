@@ -2,13 +2,14 @@ import { collectTextNodes } from "./dom";
 import type { TextNodeInfo } from "./dom";
 import { clearHighlights, highlightMatches} from "./highlighter";
 import { setContainerCensorBlur } from "./censor";
+import { applyOcrImageCensorship, clearOcrImageCensorship, scanImagesWithOcr } from "../ocr/ocr";
 import { searchAhoCorasickKeywords, searchKmpKeywords, searchBoyerMooreKeywords, searchRabinKarpKeywords, searchRegex, searchWeightedLevenshteinKeywords} from "../algorithms";
-import type { AlgorithmStats, KeywordStats, DomMatchResult, MatchingAlgorithm } from "../algorithms";
+import type { AlgorithmStats, KeywordStats, DomMatchResult, MatchResult, MatchingAlgorithm } from "../algorithms";
 import { EXTENSION_NAME } from "../utils/constants";
 import { loadKeywords } from "../utils/keywordLoader";
 import { getSettings, saveSearchStats } from "../utils/storage";
 import type { JudolSettings, StoredSearchStats } from "../utils/storage";
-import { measureExecution } from "../utils/timer";
+import { measureAsyncExecution, measureExecution } from "../utils/timer";
 import { normalizeTextForExactSearch } from "../utils/textNormalizer";
 
 const DOM_RESCAN_DEBOUNCE_MS = 800;
@@ -347,7 +348,7 @@ function addAlgorithmStats(
 }
 
 function buildStoredSearchStats(
-  matches: readonly DomMatchResult[],
+  matches: readonly Array<{ match: MatchResult }>,
   algorithmStats: Partial<Record<MatchingAlgorithm, AlgorithmStats>>
 ): StoredSearchStats {
   const keywordCounts = new Map<string, number>();
@@ -370,6 +371,7 @@ function buildStoredSearchStats(
 
 async function runSearch(settings: JudolSettings): Promise<void> {
   clearHighlights();
+  clearOcrImageCensorship();
 
   const keywords = await loadKeywords();
   const textNodes = collectTextNodes();
@@ -466,9 +468,26 @@ async function runSearch(settings: JudolSettings): Promise<void> {
   ];
 
   const highlightedCount = highlightMatches(allMatches, keyStat, settings.blurEnabled);
-  await saveSearchStats(buildStoredSearchStats(allMatches, algorithmStats));
+  let ocrMatches: Array<{ match: MatchResult }> = [];
+  let ocrDetectedImageCount = 0;
 
-  console.info(`[${EXTENSION_NAME}] highlighted ${highlightedCount} DOM matches`);
+  if (settings.ocrEnabled) {
+    const { result: ocrResult, executionTimeMs: ocrExecutionTimeMs } = await measureAsyncExecution(() =>
+      scanImagesWithOcr(keywords, keyStat)
+    );
+
+    ocrMatches = ocrResult.matches;
+    ocrDetectedImageCount = applyOcrImageCensorship(ocrResult.matches, keyStat);
+    addAlgorithmStats(algorithmStats, "OCR", ocrResult.matches.length, ocrExecutionTimeMs, ocrResult.comparisons);
+
+    console.info(
+      `[${EXTENSION_NAME}] OCR scan finished: ${ocrResult.detectedImageCount} detected images, ${ocrResult.scannedImageCount} scanned images, scan ${ocrExecutionTimeMs.toFixed(2)} ms`
+    );
+  }
+
+  await saveSearchStats(buildStoredSearchStats([...allMatches, ...ocrMatches], algorithmStats));
+
+  console.info(`[${EXTENSION_NAME}] highlighted ${highlightedCount} DOM matches, ${ocrDetectedImageCount} OCR images`);
 }
 
 function getObserverRoot(): HTMLElement {
