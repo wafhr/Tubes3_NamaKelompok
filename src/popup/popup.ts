@@ -99,7 +99,7 @@ function renderAlgorithmTable(stats: StoredSearchStats | null): void {
   if (!stats || Object.keys(stats.algorithmStats).length === 0) {
     const row = document.createElement("tr");
     const cell = document.createElement("td");
-    cell.colSpan = 3;
+    cell.colSpan = 4;
     cell.className = "judol-empty-state";
     cell.textContent = "Belum ada data algoritma.";
     row.appendChild(cell);
@@ -118,12 +118,14 @@ function renderAlgorithmTable(stats: StoredSearchStats | null): void {
     const nameCell = document.createElement("td");
     const matchCell = document.createElement("td");
     const timeCell = document.createElement("td");
+    const compareCell = document.createElement("td");
 
     nameCell.textContent = algorithm;
     matchCell.textContent = String(algorithmStat.matchCount);
     timeCell.textContent = formatTime(algorithmStat.executionTimeMs);
+    compareCell.textContent = String(algorithmStat.comparisons);
 
-    row.append(nameCell, matchCell, timeCell);
+    row.append(nameCell, matchCell, timeCell, compareCell);
     tableBody.appendChild(row);
   }
 }
