@@ -12,13 +12,19 @@ export {
   type KmpSearchResult
 } from "./kmp";
 export {
+  searchBoyerMoore,
+  searchBoyerMooreKeywords,
+  type BoyerMooreKeywordResult,
+  type BoyerMooreSearchResult
+} from "./boyerMoore";
+export {
   searchRabinKarp,
   searchRabinKarpKeywords,
   type RabinKarpKeywordResult,
   type RabinKarpSearchResult
 } from "./rabinKarp";
 export { searchRegex } from "./regexMatcher";
-export type { AlgorithmStats, MatchResult, MatchingAlgorithm } from "./types";
+export type { AlgorithmStats, KeywordStats, MatchResult, MatchingAlgorithm, DomMatchResult} from "./types";
 export {
   calculateSimilarity,
   getSubstitutionCost,
