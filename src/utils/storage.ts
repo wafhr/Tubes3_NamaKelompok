@@ -53,12 +53,28 @@ export async function saveSettings(settings: JudolSettings): Promise<void> {
   await chrome.storage.local.set({ [SETTINGS_STORAGE_KEY]: settings });
 }
 
-export async function getSearchStats(): Promise<StoredSearchStats | null> {
+export async function getSearchStats(): Promise<Record<string, StoredSearchStats>> {
   const stored = await chrome.storage.local.get(SEARCH_STATS_STORAGE_KEY);
-
-  return (stored[SEARCH_STATS_STORAGE_KEY] as StoredSearchStats | undefined) ?? null;
+  
+  return (stored[SEARCH_STATS_STORAGE_KEY] as Record<string, StoredSearchStats> | undefined) ?? {};
 }
 
-export async function saveSearchStats(stats: StoredSearchStats): Promise<void> {
-  await chrome.storage.local.set({ [SEARCH_STATS_STORAGE_KEY]: stats });
+export async function saveSearchStats(url: string, stats: StoredSearchStats): Promise<void> {
+  const allStats = await getSearchStats();
+  
+  allStats[url] = stats;
+  
+  const MAX_STORED_URLS = 20;
+  const entries = Object.entries(allStats);
+  
+  if (entries.length > MAX_STORED_URLS) {
+    entries.sort((a, b) => b[1].searchedAt - a[1].searchedAt);
+    
+    const excessEntries = entries.slice(MAX_STORED_URLS);
+    for (const [excessUrl] of excessEntries) {
+      delete allStats[excessUrl];
+    }
+  }
+
+  await chrome.storage.local.set({ [SEARCH_STATS_STORAGE_KEY]: allStats });
 }

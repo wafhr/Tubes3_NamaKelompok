@@ -377,7 +377,7 @@ async function runSearch(settings: JudolSettings): Promise<void> {
 
   if (!settings.enabled) {
     setContainerCensorBlur(false);
-    await saveSearchStats(buildStoredSearchStats([], createEmptyAlgorithmStats()));
+    await saveSearchStats(window.location.href, buildStoredSearchStats([], createEmptyAlgorithmStats()));
     console.info(`[${EXTENSION_NAME}] search skipped because detection is disabled`);
     return;
   }
@@ -477,7 +477,7 @@ async function runSearch(settings: JudolSettings): Promise<void> {
   ];
 
   const highlightedCount = highlightMatches(allMatches, keyStat, settings.blurEnabled);
-  await saveSearchStats(buildStoredSearchStats(allMatches, algorithmStats));
+  await saveSearchStats(window.location.href, buildStoredSearchStats(allMatches, algorithmStats));
 
   if (settings.ocrEnabled) {
     void runOcrScan(searchId, keywords, keyStat, allMatches, algorithmStats).catch((error: unknown) => {
@@ -510,7 +510,7 @@ async function runOcrScan(
   };
 
   addAlgorithmStats(updatedAlgorithmStats, "OCR", ocrResult.matches.length, ocrExecutionTimeMs, ocrResult.comparisons);
-  await saveSearchStats(buildStoredSearchStats([...textMatches, ...ocrMatches], updatedAlgorithmStats));
+  await saveSearchStats(window.location.href, buildStoredSearchStats([...textMatches, ...ocrMatches], updatedAlgorithmStats));
 
   console.info(
     `[${EXTENSION_NAME}] OCR scan finished: ${ocrResult.detectedImageCount} detected images, ${ocrResult.scannedImageCount} scanned images, ${ocrDetectedImageCount} censored images, scan ${ocrExecutionTimeMs.toFixed(2)} ms`
