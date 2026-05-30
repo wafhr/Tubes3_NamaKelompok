@@ -63,21 +63,9 @@ function generateTooltipContent(matches: MatchResult[]): string {
   }
 
   const uniqueKeywords = Array.from(keywordCounts.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-
   const uniqueAlgorithms = Array.from(new Set(matches.map((m) => m.algorithm).filter(Boolean)));
 
-  const algorithmTimeMap = new Map<string, number>();
-  for (const m of matches) {
-    if (m.algorithm && m.searchTime) {
-      const current = algorithmTimeMap.get(m.algorithm) || 0;
-      if (m.searchTime > current) {
-        algorithmTimeMap.set(m.algorithm, m.searchTime);
-      }
-    }
-  }
-  const totalExecutionTimeMs = Array.from(algorithmTimeMap.values())
-    .reduce((sum, t) => sum + t, 0);
-
+  const totalExecutionTimeMs = matches.reduce((sum, m) => sum + (m.searchTime || 0), 0);
   const totalMatches = matches.length;
 
   const keywordBadges = uniqueKeywords
@@ -95,7 +83,7 @@ function generateTooltipContent(matches: MatchResult[]): string {
       </span>
       <br/><br/>
 
-      <strong>Algoritma:</strong> ${uniqueAlgorithms.join(" & ")}<br/>
+      <strong>Algoritma:</strong> ${uniqueAlgorithms.join(", ")}<br/>
       <strong>Keywords:</strong> ${keywordBadges}<br/>
 
       <hr style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin:10px 0;" />
