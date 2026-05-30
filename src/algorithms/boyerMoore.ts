@@ -1,5 +1,4 @@
-import type { MatchResult, KeywordStats } from "./types";
-import { measureExecution } from "../utils/timer";
+import type { MatchResult } from "./types";
 
 export interface BoyerMooreKeywordResult {
   keyword: string;
@@ -39,9 +38,9 @@ export function searchBoyerMoore(text: string, keyword: string): BoyerMooreKeywo
     }
 
     let searchComparisons = 0;
-
-    // posisi awal pattern pada text
     let textIndex = 0;
+
+    let startTime = performance.now();
 
     while (textIndex <= m - n) {
         let patternIndex = n - 1;
@@ -60,6 +59,9 @@ export function searchBoyerMoore(text: string, keyword: string): BoyerMooreKeywo
         if (patternIndex < 0) {
             const startIndex = textIndex;
             const endIndex = textIndex + n;
+            
+            const endTime = performance.now();
+            const segmentDuration = endTime - startTime;
 
             matches.push({
                 keyword,
@@ -68,9 +70,11 @@ export function searchBoyerMoore(text: string, keyword: string): BoyerMooreKeywo
                 endIndex,
                 matchedText: text.slice(startIndex, endIndex),
                 comparisons: searchComparisons,
+                searchTime: segmentDuration
             });
 
             textIndex += 1;
+            startTime = performance.now();
         } else {
             const x = lastOccurrence.get(text[textIndex + patternIndex]) ?? -1;
             const shift = Math.max(1, patternIndex - x);
@@ -86,36 +90,20 @@ export function searchBoyerMoore(text: string, keyword: string): BoyerMooreKeywo
     };
 }
 
-export function searchBoyerMooreKeywords(text: string, keywords: readonly string[], keyStat: KeywordStats): BoyerMooreSearchResult {
+export function searchBoyerMooreKeywords(text: string, keywords: readonly string[]): BoyerMooreSearchResult {
   const keywordResults: BoyerMooreKeywordResult[] = [];
   const matches: MatchResult[] = [];
   let comparisons = 0;
 
   for (const keyword of keywords) {
-    const { result: result, executionTimeMs: execTime } = measureExecution(() => searchBoyerMoore(text, keyword));
-
-    // tambah keyStat
-    if (result.matches.length > 0) {
-        const algoKey = "Boyer-Moore";
-
-        if (!keyStat.has(keyword)) keyStat.set(keyword, new Map());
-
-        const algoMap = keyStat.get(keyword)!;
-        const prevCount = algoMap.get(algoKey)?.matchCount ?? 0;
-        const prevTime = algoMap.get(algoKey)?.executionTimeMs ?? 0;
-
-        algoMap.set(algoKey, {
-            matchCount: prevCount + result.matches.length,
-            executionTimeMs: prevTime + execTime,
-        });
-    }
+    const result = searchBoyerMoore(text, keyword);
     
-        keywordResults.push(result);
-        comparisons += result.searchComparisons;
+    keywordResults.push(result);
+    comparisons += result.searchComparisons;
 
-        for (const match of result.matches) {
+    for (const match of result.matches) {
         matches.push(match);
-        }
+    }
   }
 
   return {

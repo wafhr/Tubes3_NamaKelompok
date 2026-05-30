@@ -223,14 +223,19 @@ function bindRescanControl(): void {
 }
 
 async function initializePopup(): Promise<void> {
-  const [settings, stats] = await Promise.all([getSettings(), getSearchStats()]);
+  const [settings, allStats, tabs] = await Promise.all([
+    getSettings(), getSearchStats(), chrome.tabs.query({ active: true, currentWindow: true })]);
+
+  const activeTab = tabs[0];
+  const activeUrl = activeTab?.url ?? "";
+  const stats = allStats[activeUrl] ?? null;
 
   renderSettings(settings);
   renderStats(stats);
   bindSettingsControls();
   bindRescanControl();
 
-  chrome.storage.onChanged.addListener((changes, areaName) => {
+  chrome.storage.onChanged.addListener(async (changes, areaName) => {
     if (areaName !== "local") {
       return;
     }
@@ -239,8 +244,15 @@ async function initializePopup(): Promise<void> {
       renderSettings(changes[SETTINGS_STORAGE_KEY].newValue as JudolSettings);
     }
 
+    // Hanya update UI jika data URL aktif saat ini ikut berubah di storage
     if (changes[SEARCH_STATS_STORAGE_KEY]) {
-      renderStats((changes[SEARCH_STATS_STORAGE_KEY].newValue as StoredSearchStats | undefined) ?? null);
+      const [currentActiveTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const currentActiveUrl = currentActiveTab?.url ?? "";
+      
+      const newAllStats = changes[SEARCH_STATS_STORAGE_KEY].newValue as Record<string, StoredSearchStats> | undefined;
+      
+      // Ambil data terbaru khusus untuk tab yang sedang dipandang user
+      renderStats(newAllStats?.[currentActiveUrl] ?? null);
     }
   });
 }

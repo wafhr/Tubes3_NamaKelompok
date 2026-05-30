@@ -25,7 +25,7 @@ export {
   type RabinKarpSearchResult
 } from "./rabinKarp";
 export { searchRegex } from "./regexMatcher";
-export type { AlgorithmStats, KeywordStats, MatchResult, MatchingAlgorithm, DomMatchResult} from "./types";
+export type { AlgorithmStats, MatchResult, MatchingAlgorithm, DomMatchResult } from "./types";
 export {
   calculateSimilarity,
   getSubstitutionCost,

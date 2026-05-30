@@ -1,5 +1,4 @@
-import type { MatchResult, KeywordStats } from "./types";
-import { measureExecution } from "../utils/timer";
+import type { MatchResult } from "./types";
 
 const HASH_BASE = 256;
 const HASH_MODULUS = 1_000_000_007;
@@ -85,6 +84,8 @@ export function searchRabinKarp(text: string, keyword: string): RabinKarpKeyword
   let searchComparisons = 0;
   let hashComparisons = 0;
 
+  let startTime = performance.now();
+
   for (let startIndex = 0; startIndex <= text.length - keyword.length; startIndex += 1) {
     hashComparisons += 1;
 
@@ -95,14 +96,20 @@ export function searchRabinKarp(text: string, keyword: string): RabinKarpKeyword
       if (verification.isMatch) {
         const endIndex = startIndex + keyword.length;
 
+        const endTime = performance.now();
+        const segmentDuration = endTime - startTime;
+
         matches.push({
           keyword,
           algorithm: "Rabin-Karp",
           startIndex,
           endIndex,
           matchedText: text.slice(startIndex, endIndex),
-          comparisons: hashComparisons + searchComparisons
+          comparisons: hashComparisons + searchComparisons,
+          searchTime: segmentDuration
         });
+
+        startTime = performance.now();
       }
     }
 
@@ -126,29 +133,14 @@ export function searchRabinKarp(text: string, keyword: string): RabinKarpKeyword
   };
 }
 
-export function searchRabinKarpKeywords(text: string, keywords: readonly string[], keyStat: KeywordStats): RabinKarpSearchResult {
+export function searchRabinKarpKeywords(text: string, keywords: readonly string[]): RabinKarpSearchResult {
   const keywordResults: RabinKarpKeywordResult[] = [];
   const matches: MatchResult[] = [];
   let comparisons = 0;
 
   for (const keyword of keywords) {
-    const { result: result, executionTimeMs: execTime } = measureExecution(() => searchRabinKarp(text, keyword));
-    
-    // tambah keyStat
-    if (result.matches.length > 0) {
-        const algoKey = "Rabin-Karp";
+    const result = searchRabinKarp(text, keyword);
 
-        if (!keyStat.has(keyword)) keyStat.set(keyword, new Map());
-
-        const algoMap = keyStat.get(keyword)!;
-        const prevCount = algoMap.get(algoKey)?.matchCount ?? 0;
-        const prevTime = algoMap.get(algoKey)?.executionTimeMs ?? 0;
-
-        algoMap.set(algoKey, {
-            matchCount: prevCount + result.matches.length,
-            executionTimeMs: prevTime + execTime,
-        });
-    }
     keywordResults.push(result);
     comparisons += result.totalComparisons;
 

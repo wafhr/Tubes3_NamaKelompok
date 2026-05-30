@@ -1,5 +1,4 @@
-import type { MatchResult, KeywordStats } from "./types";
-import { measureExecution } from "../utils/timer";
+import type { MatchResult } from "./types";
 
 export interface KmpKeywordResult {
   keyword: string;
@@ -59,6 +58,8 @@ export function searchKmp(text: string, keyword: string): KmpKeywordResult {
   let patternIndex = 0;
   let searchComparisons = 0;
 
+  let startTime = performance.now();
+
   while (textIndex < text.length) {
     searchComparisons += 1;
 
@@ -70,16 +71,21 @@ export function searchKmp(text: string, keyword: string): KmpKeywordResult {
         const startIndex = textIndex - keyword.length;
         const endIndex = textIndex;
 
+        const endTime = performance.now();
+        const segmentDuration = endTime - startTime;
+
         matches.push({
           keyword,
           algorithm: "KMP",
           startIndex,
           endIndex,
           matchedText: text.slice(startIndex, endIndex),
-          comparisons: preprocessingComparisons + searchComparisons
+          comparisons: preprocessingComparisons + searchComparisons,
+          searchTime: segmentDuration
         });
 
         patternIndex = lpsTable[patternIndex - 1];
+        startTime = performance.now();
       }
     } else if (patternIndex > 0) {
       patternIndex = lpsTable[patternIndex - 1];
@@ -98,29 +104,13 @@ export function searchKmp(text: string, keyword: string): KmpKeywordResult {
   };
 }
 
-export function searchKmpKeywords(text: string, keywords: readonly string[], keyStat: KeywordStats): KmpSearchResult {
+export function searchKmpKeywords(text: string, keywords: readonly string[]): KmpSearchResult {
   const keywordResults: KmpKeywordResult[] = [];
   const matches: MatchResult[] = [];
   let comparisons = 0;
 
   for (const keyword of keywords) {
-    const { result: result, executionTimeMs: execTime } = measureExecution(() => searchKmp(text, keyword));
-    
-    // tambah keyStat
-    if (result.matches.length > 0) {
-      const algoKey = "KMP";
-
-      if (!keyStat.has(keyword)) keyStat.set(keyword, new Map());
-
-      const algoMap = keyStat.get(keyword)!;
-      const prevCount = algoMap.get(algoKey)?.matchCount ?? 0;
-      const prevTime = algoMap.get(algoKey)?.executionTimeMs ?? 0;
-
-      algoMap.set(algoKey, {
-          matchCount: prevCount + result.matches.length,
-          executionTimeMs: prevTime + execTime,
-      });
-    }
+    const result = searchKmp(text, keyword);
     
     keywordResults.push(result);
     comparisons += result.totalComparisons;
