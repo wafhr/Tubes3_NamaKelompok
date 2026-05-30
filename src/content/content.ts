@@ -347,7 +347,7 @@ function addAlgorithmStats(
 }
 
 function buildStoredSearchStats(
-  matches: readonly Array<{ match: MatchResult }>,
+  matches: ReadonlyArray<{ match: MatchResult }>,
   algorithmStats: Partial<Record<MatchingAlgorithm, AlgorithmStats>>
 ): StoredSearchStats {
   const keywordCounts = new Map<string, number>();
