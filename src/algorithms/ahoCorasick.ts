@@ -94,7 +94,7 @@ export function buildAhoCorasickAutomaton(keywords: readonly string[]): AhoCoras
   return { nodes };
 }
 
-function runAhoCorasickSearch(text: string, automaton: AhoCorasickAutomaton): AhoCorasickSearchResult {
+export function searchAhoCorasickAutomaton(text: string, automaton: AhoCorasickAutomaton): AhoCorasickSearchResult {
   const matches: MatchResult[] = [];
   let currentNodeIndex = 0;
   let comparisons = 0;
@@ -135,7 +135,7 @@ function runAhoCorasickSearch(text: string, automaton: AhoCorasickAutomaton): Ah
 
 export function searchAhoCorasickKeywords(text: string, keywords: readonly string[], keyStat: KeywordStats): AhoCorasickSearchResult {
   const automaton = buildAhoCorasickAutomaton(keywords);
-  const { result, executionTimeMs: execTime } = measureExecution(() => runAhoCorasickSearch(text, automaton));
+  const { result, executionTimeMs: execTime } = measureExecution(() => searchAhoCorasickAutomaton(text, automaton));
   const matchCountByKeyword = new Map<string, number>();
 
   for (const match of result.matches) {

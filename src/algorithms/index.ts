@@ -1,5 +1,6 @@
 export {
   buildAhoCorasickAutomaton,
+  searchAhoCorasickAutomaton,
   searchAhoCorasickKeywords,
   type AhoCorasickAutomaton,
   type AhoCorasickSearchResult

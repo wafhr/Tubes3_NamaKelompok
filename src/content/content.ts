@@ -3,7 +3,7 @@ import type { TextNodeInfo } from "./dom";
 import { clearHighlights, highlightMatches} from "./highlighter";
 import { setContainerCensorBlur } from "./censor";
 import { applyOcrImageCensorship, clearOcrImageCensorship, scanImagesWithOcr } from "../ocr/ocr";
-import { searchAhoCorasickKeywords, searchKmpKeywords, searchBoyerMooreKeywords, searchRabinKarpKeywords, searchRegex, searchWeightedLevenshteinKeywords} from "../algorithms";
+import { buildAhoCorasickAutomaton, searchAhoCorasickAutomaton, searchKmpKeywords, searchBoyerMooreKeywords, searchRabinKarpKeywords, searchRegex, searchWeightedLevenshteinKeywords} from "../algorithms";
 import type { AlgorithmStats, KeywordStats, DomMatchResult, MatchResult, MatchingAlgorithm } from "../algorithms";
 import { EXTENSION_NAME, MANUAL_RESCAN_MESSAGE_TYPE } from "../utils/constants";
 import { loadKeywords } from "../utils/keywordLoader";
@@ -265,15 +265,15 @@ function collectUnmatchedTextSegments(
 
 export function scanTextNodesWithAhoCorasick(
   textNodes: readonly TextNodeInfo[],
-  keywords: readonly string[],
-  keyStat: KeywordStats
+  keywords: readonly string[]
 ): AhoCorasickDomScanResult {
+  const automaton = buildAhoCorasickAutomaton(keywords);
   const matches: DomMatchResult[] = [];
   let comparisons = 0;
 
   for (const textNode of textNodes) {
     const normalizedText = normalizeTextForExactSearch(textNode.text);
-    const result = searchAhoCorasickKeywords(normalizedText, keywords, keyStat);
+    const result = searchAhoCorasickAutomaton(normalizedText, automaton);
     comparisons += result.comparisons;
 
     for (const match of result.matches) {
@@ -346,6 +346,32 @@ function addAlgorithmStats(
   };
 }
 
+function addKeywordAlgorithmStats(
+  keyStat: KeywordStats,
+  matches: ReadonlyArray<{ match: MatchResult }>,
+  algorithm: MatchingAlgorithm,
+  executionTimeMs: number
+): void {
+  const matchCountByKeyword = new Map<string, number>();
+
+  for (const { match } of matches) {
+    matchCountByKeyword.set(match.keyword, (matchCountByKeyword.get(match.keyword) ?? 0) + 1);
+  }
+
+  for (const [keyword, matchCount] of matchCountByKeyword) {
+    if (!keyStat.has(keyword)) keyStat.set(keyword, new Map());
+
+    const algoMap = keyStat.get(keyword)!;
+    const prevCount = algoMap.get(algorithm)?.matchCount ?? 0;
+    const prevTime = algoMap.get(algorithm)?.executionTimeMs ?? 0;
+
+    algoMap.set(algorithm, {
+      matchCount: prevCount + matchCount,
+      executionTimeMs: prevTime + executionTimeMs
+    });
+  }
+}
+
 function buildStoredSearchStats(
   matches: ReadonlyArray<{ match: MatchResult }>,
   algorithmStats: Partial<Record<MatchingAlgorithm, AlgorithmStats>>
@@ -389,12 +415,22 @@ async function runSearch(settings: JudolSettings): Promise<void> {
   const { result: kmpResult, executionTimeMs: kmpExecutionTimeMs } = measureExecution(() => scanTextNodesWithKmp(textNodes, keywords, keyStat));
   const { result: boyerMooreResult, executionTimeMs: boyerMooreExecutionTimeMs } = measureExecution(() => scanTextNodesWithBoyerMoore(textNodes, keywords, keyStat));
   const { result: regexResult, executionTimeMs: regexExecutionTimeMs } = measureExecution(() => scanTextNodesWithRegex(textNodes, keyStat));
-  const { result: ahoResult, executionTimeMs: ahoExecutionTimeMs } = settings.ahoCorasickEnabled
-    ? measureExecution(() => scanTextNodesWithAhoCorasick(textNodes, keywords, keyStat))
-    : {result: null, executionTimeMs: null };
-  const { result: rabinKarpResult, executionTimeMs: rabinKarpExecutionTimeMs } = settings.rabinKarpEnabled
-    ? measureExecution(() => scanTextNodesWithRabinKarp(textNodes, keywords, keyStat))
-    : {result: null, executionTimeMs: null };
+  let ahoResult: AhoCorasickDomScanResult | null = null;
+  let ahoExecutionTimeMs = 0;
+  let rabinKarpResult: RabinKarpDomScanResult | null = null;
+  let rabinKarpExecutionTimeMs = 0;
+
+  if (settings.ahoCorasickEnabled) {
+    const ahoExecution = measureExecution(() => scanTextNodesWithAhoCorasick(textNodes, keywords));
+    ahoResult = ahoExecution.result;
+    ahoExecutionTimeMs = ahoExecution.executionTimeMs;
+  }
+
+  if (settings.rabinKarpEnabled) {
+    const rabinKarpExecution = measureExecution(() => scanTextNodesWithRabinKarp(textNodes, keywords, keyStat));
+    rabinKarpResult = rabinKarpExecution.result;
+    rabinKarpExecutionTimeMs = rabinKarpExecution.executionTimeMs;
+  }
 
   addAlgorithmStats(algorithmStats, "KMP", kmpResult.matches.length, kmpExecutionTimeMs, kmpResult.comparisons);
   addAlgorithmStats(
@@ -407,6 +443,7 @@ async function runSearch(settings: JudolSettings): Promise<void> {
   addAlgorithmStats(algorithmStats, "Regex", regexResult.matches.length, regexExecutionTimeMs, regexResult.comparisons);
 
   if (ahoResult) {
+    addKeywordAlgorithmStats(keyStat, ahoResult.matches, "Aho-Corasick", ahoExecutionTimeMs);
     addAlgorithmStats(
       algorithmStats,
       "Aho-Corasick",
