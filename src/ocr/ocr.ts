@@ -1,5 +1,5 @@
 import { searchKmpKeywords, searchRegex, searchWeightedLevenshteinKeywords } from "../algorithms";
-import type { KeywordStats, MatchResult } from "../algorithms";
+import type { MatchResult } from "../algorithms";
 import { bindTooltip, clearTooltip } from "../content/tooltip";
 import { normalizeTextForExactSearch } from "../utils/textNormalizer";
 import { nowMs } from "../utils/timer";
@@ -90,34 +90,9 @@ function toOcrMatch(match: MatchResult, recognizedText: string): MatchResult {
   return {
     ...match,
     algorithm: "OCR",
-    matchedText: recognizedText.slice(match.startIndex, match.endIndex)
+    matchedText: recognizedText.slice(match.startIndex, match.endIndex),
+    searchTime: match.searchTime
   };
-}
-
-function addOcrKeywordStats(
-  keyStat: KeywordStats,
-  matches: readonly MatchResult[],
-  executionTimeMs: number
-): void {
-  const matchCountByKeyword = new Map<string, number>();
-
-  for (const match of matches) {
-    const keyword = match.keyword.toLowerCase();
-    matchCountByKeyword.set(keyword, (matchCountByKeyword.get(keyword) ?? 0) + 1);
-  }
-
-  for (const [keyword, matchCount] of matchCountByKeyword) {
-    if (!keyStat.has(keyword)) keyStat.set(keyword, new Map());
-
-    const algoMap = keyStat.get(keyword)!;
-    const prevCount = algoMap.get("OCR")?.matchCount ?? 0;
-    const prevTime = algoMap.get("OCR")?.executionTimeMs ?? 0;
-
-    algoMap.set("OCR", {
-      matchCount: prevCount + matchCount,
-      executionTimeMs: prevTime + executionTimeMs
-    });
-  }
 }
 
 function detectOcrTextMatches(
@@ -125,14 +100,16 @@ function detectOcrTextMatches(
   keywords: readonly string[]
 ): { matches: MatchResult[]; comparisons: number } {
   const normalizedText = normalizeTextForExactSearch(recognizedText);
-  const tempKeyStat: KeywordStats = new Map();
-  const exactResult = searchKmpKeywords(normalizedText, keywords, tempKeyStat);
-  const regexMatches = searchRegex(recognizedText, tempKeyStat);
-  const fuzzyResult = searchWeightedLevenshteinKeywords(normalizedText, keywords, tempKeyStat);
+  
+  const exactResult = searchKmpKeywords(normalizedText, keywords); 
+  const regexMatches = searchRegex(recognizedText); 
+  const fuzzyResult = searchWeightedLevenshteinKeywords(normalizedText, keywords); 
+
   const exactRanges = exactResult.matches;
   const fuzzyMatches = fuzzyResult.matches.filter(
     (fuzzyMatch) => !exactRanges.some((exactMatch) => rangesOverlap(fuzzyMatch, exactMatch))
   );
+
   const matches = [
     ...exactResult.matches.map((match) => toOcrMatch(match, recognizedText)),
     ...regexMatches.map((match) => toOcrMatch(match, recognizedText)),
@@ -158,15 +135,10 @@ async function recognizeImageText(image: HTMLImageElement): Promise<string> {
   const text = result.data.text.trim();
 
   recognizedTextCache.set(cacheKey, text);
-
   return text;
 }
 
-export async function scanImagesWithOcr(
-  keywords: readonly string[],
-  keyStat: KeywordStats
-): Promise<OcrImageScanResult> {
-  const startTime = nowMs();
+export async function scanImagesWithOcr(keywords: readonly string[]): Promise<OcrImageScanResult> {
   const images = collectScannableImages();
   const matches: OcrImageMatchResult[] = [];
   let comparisons = 0;
@@ -195,12 +167,6 @@ export async function scanImagesWithOcr(
     }
   }
 
-  addOcrKeywordStats(
-    keyStat,
-    matches.map((match) => match.match),
-    nowMs() - startTime
-  );
-
   return {
     matches,
     scannedImageCount: images.length,
@@ -219,17 +185,13 @@ export function clearOcrImageCensorship(): void {
   });
 }
 
-export function applyOcrImageCensorship(
-  matches: readonly OcrImageMatchResult[],
-  keyStat: KeywordStats
-): number {
+export function applyOcrImageCensorship(matches: readonly OcrImageMatchResult[]): number {
   const matchesByImage = new Map<HTMLImageElement, MatchResult[]>();
 
   for (const { element, match } of matches) {
     if (!matchesByImage.has(element)) {
       matchesByImage.set(element, []);
     }
-
     matchesByImage.get(element)!.push(match);
   }
 
@@ -237,7 +199,7 @@ export function applyOcrImageCensorship(
     image.classList.add(OCR_DETECTED_CLASS);
     image.classList.add(OCR_BLUR_CLASS);
     image.setAttribute(OCR_DATA_ATTR, "true");
-    bindTooltip(image, imageMatches, keyStat);
+    bindTooltip(image, imageMatches);
   }
 
   return matchesByImage.size;
