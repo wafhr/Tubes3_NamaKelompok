@@ -2,7 +2,7 @@ import { collectTextNodes } from "./dom";
 import type { TextNodeInfo } from "./dom";
 import { clearHighlights, highlightMatches} from "./highlighter";
 import { setContainerCensorBlur } from "./censor";
-import { bindTooltip, findTooltipTarget } from "./tooltip";
+import { bindTooltip } from "./tooltip";
 import { applyOcrImageCensorship, clearOcrImageCensorship, scanImagesWithOcr } from "../ocr/ocr";
 import { searchAhoCorasickKeywords, searchKmpKeywords, searchBoyerMooreKeywords, searchRabinKarpKeywords, searchRegex, searchWeightedLevenshteinKeywords} from "../algorithms";
 import type { AlgorithmStats, DomMatchResult, MatchResult, MatchingAlgorithm } from "../algorithms";

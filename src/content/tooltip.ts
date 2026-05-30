@@ -10,9 +10,6 @@ interface TooltipListeners {
 
 const elementListenersMap = new WeakMap<HTMLElement, TooltipListeners>();
 
-const IMMUNE_TAGS = new Set(["BODY", "HTML", "MAIN", "ARTICLE", "SECTION"]);
-const INLINE_TAGS = new Set(["EM", "STRONG", "B", "I", "A", "CODE", "SMALL", "MARK"]);
-
 function initTooltip(): HTMLDivElement {
   if (tooltipElement) return tooltipElement;
 
@@ -24,33 +21,6 @@ function initTooltip(): HTMLDivElement {
   document.body.appendChild(tooltipElement);
 
   return tooltipElement;
-}
-
-export function findTooltipTarget(node: Node): HTMLElement | null {
-  let parent = node.parentNode as HTMLElement | null;
-  let lastValidInline: HTMLElement | null = null;
-
-  while (parent) {
-    if (parent.nodeType === Node.ELEMENT_NODE) {
-      const tagName = parent.tagName;
-
-      if (IMMUNE_TAGS.has(tagName)) {
-        return lastValidInline;
-      }
-
-      if (INLINE_TAGS.has(tagName)) {
-        lastValidInline = parent;
-        parent = parent.parentNode as HTMLElement | null;
-        continue;
-      }
-
-      return parent;
-    }
-
-    parent = parent.parentNode as HTMLElement | null;
-  }
-
-  return null;
 }
 
 function generateTooltipContent(matches: MatchResult[]): string {
@@ -94,10 +64,7 @@ function generateTooltipContent(matches: MatchResult[]): string {
   `;
 }
 
-export function bindTooltip(
-  element: HTMLElement,
-  matches: MatchResult[]
-): void {
+export function bindTooltip(element: HTMLElement, matches: MatchResult[]): void {
   const tooltip = initTooltip();
 
   if (elementListenersMap.has(element)) {
