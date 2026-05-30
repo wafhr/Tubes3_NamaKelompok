@@ -103,7 +103,7 @@ function renderAlgorithmTable(stats: StoredSearchStats | null): void {
     const cell = document.createElement("td");
     cell.colSpan = 4;
     cell.className = "judol-empty-state";
-    cell.textContent = "Belum ada data algoritma.";
+    cell.textContent = "Belum ada data";
     row.appendChild(cell);
     tableBody.appendChild(row);
     return;
@@ -244,14 +244,12 @@ async function initializePopup(): Promise<void> {
       renderSettings(changes[SETTINGS_STORAGE_KEY].newValue as JudolSettings);
     }
 
-    // Hanya update UI jika data URL aktif saat ini ikut berubah di storage
     if (changes[SEARCH_STATS_STORAGE_KEY]) {
       const [currentActiveTab] = await chrome.tabs.query({ active: true, currentWindow: true });
       const currentActiveUrl = currentActiveTab?.url ?? "";
       
       const newAllStats = changes[SEARCH_STATS_STORAGE_KEY].newValue as Record<string, StoredSearchStats> | undefined;
       
-      // Ambil data terbaru khusus untuk tab yang sedang dipandang user
       renderStats(newAllStats?.[currentActiveUrl] ?? null);
     }
   });

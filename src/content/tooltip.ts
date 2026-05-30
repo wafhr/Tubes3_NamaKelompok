@@ -1,8 +1,17 @@
-import { MatchResult, KeywordStats} from "../algorithms";
+import { MatchResult } from "../algorithms";
 
 let tooltipElement: HTMLDivElement | null = null;
-const tooltipDataByElement = new WeakMap<HTMLElement, { matches: MatchResult[]; keyStat: KeywordStats }>();
-const tooltipBoundElements = new WeakSet<HTMLElement>();
+
+interface TooltipListeners {
+  mouseenter: (e: MouseEvent) => void;
+  mousemove: (e: MouseEvent) => void;
+  mouseleave: () => void;
+}
+
+const elementListenersMap = new WeakMap<HTMLElement, TooltipListeners>();
+
+const IMMUNE_TAGS = new Set(["BODY", "HTML", "MAIN", "ARTICLE", "SECTION"]);
+const INLINE_TAGS = new Set(["EM", "STRONG", "B", "I", "A", "CODE", "SMALL", "MARK"]);
 
 function initTooltip(): HTMLDivElement {
   if (tooltipElement) return tooltipElement;
@@ -13,159 +22,149 @@ function initTooltip(): HTMLDivElement {
   tooltipElement.hidden = true;
 
   document.body.appendChild(tooltipElement);
+
   return tooltipElement;
 }
 
-function generateTooltipContent(matches: MatchResult[], keyStat: KeywordStats): string {
-  let htmlContent = "";
+export function findTooltipTarget(node: Node): HTMLElement | null {
+  let parent = node.parentNode as HTMLElement | null;
+  let lastValidInline: HTMLElement | null = null;
 
-  const exactAlgs = matches.filter(m => 
-    ["KMP", "Boyer-Moore", "Aho-Corasick", "Rabin-Karp"].includes(m.algorithm)
-  );
+  while (parent) {
+    if (parent.nodeType === Node.ELEMENT_NODE) {
+      const tagName = parent.tagName;
 
-  if (exactAlgs.length > 0) {
-    const sample = exactAlgs[0];
-    const keywordLower = sample.keyword.toLowerCase();
-    const uniqueAlgs = Array.from(new Set(exactAlgs.map(m => m.algorithm)));
-    const algString = uniqueAlgs.join(" dan ");
+      if (IMMUNE_TAGS.has(tagName)) {
+        return lastValidInline;
+      }
 
-    const statsMap = keyStat.get(keywordLower);
-    let matchCount = 1;
-    if (statsMap && statsMap.has(uniqueAlgs[0])) {
-      matchCount = statsMap.get(uniqueAlgs[0])!.matchCount;
+      if (INLINE_TAGS.has(tagName)) {
+        lastValidInline = parent;
+        parent = parent.parentNode as HTMLElement | null;
+        continue;
+      }
+
+      return parent;
     }
 
-    htmlContent += `
-      <div class="judol-tooltip-section">
-        <span class="judol-tooltip-title judol-tooltip-title-exact">Exact Matching</span><br/>
-        <strong>Algoritma yang digunakan:</strong> ${algString}<br/>
-        <strong>Keyword:</strong> <code class="judol-tooltip-code">${sample.keyword}</code><br/>
-        <strong>Jumlah kemunculan:</strong> ${matchCount}<br/>
-    `;
-
-    uniqueAlgs.forEach(alg => {
-      const algStat = statsMap?.get(alg);
-      const timeStr = algStat ? `${algStat.executionTimeMs.toFixed(3)} ms` : "0.00 ms";
-      htmlContent += `<strong>Waktu eksekusi ${alg}:</strong> ${timeStr}<br/>`;
-    });
-
-    htmlContent += `</div>`;
+    parent = parent.parentNode as HTMLElement | null;
   }
 
-  const regexMatches = matches.filter(m => m.algorithm === "Regex");
-  regexMatches.forEach((m, idx) => {
-    const patternLower = m.matchedText.toLowerCase();
-    const statsMap = keyStat.get(patternLower);
-    const regexStat = statsMap?.get("Regex");
-    const matchCount = regexStat ? regexStat.matchCount : 1;
-    const timeStr = regexStat ? `${regexStat.executionTimeMs.toFixed(3)} ms` : "0.00 ms";
-
-    if (exactAlgs.length > 0 || idx > 0) {
-      htmlContent += `<hr class="judol-tooltip-divider" />`;
-    }
-
-    htmlContent += `
-      <div class="judol-tooltip-section">
-        <span class="judol-tooltip-title judol-tooltip-title-regex">Regex Matching</span><br/>
-        <strong>Algoritma yang digunakan:</strong> Regex<br/>
-        <strong>Pola/Keyword:</strong> <code class="judol-tooltip-code">${m.matchedText}</code><br/>
-        <strong>Jumlah kemunculan:</strong> ${matchCount}<br/>
-        <strong>Waktu eksekusi Regex:</strong> ${timeStr}<br/>
-      </div>
-    `;
-  });
-
-  const fuzzyMatches = matches.filter(m => m.algorithm === "Weighted Levenshtein");
-  fuzzyMatches.forEach((m, idx) => {
-    const keywordLower = m.keyword.toLowerCase();
-    const statsMap = keyStat.get(keywordLower);
-    const fuzzyStat = statsMap?.get("Weighted Levenshtein");
-    const matchCount = fuzzyStat ? fuzzyStat.matchCount : 1;
-    const timeStr = fuzzyStat ? `${fuzzyStat.executionTimeMs.toFixed(3)} ms` : "0.00 ms";
-
-    if (exactAlgs.length > 0 || regexMatches.length > 0 || idx > 0) {
-      htmlContent += `<hr class="judol-tooltip-divider" />`;
-    }
-
-    htmlContent += `
-      <div class="judol-tooltip-section">
-        <span class="judol-tooltip-title judol-tooltip-title-fuzzy">Fuzzy Matching</span><br/>
-        <strong>Algoritma yang digunakan:</strong> Weighted Levenshtein<br/>
-        <strong>Keyword Target:</strong> <code class="judol-tooltip-code">${m.keyword}</code><br/>
-        <strong>Teks Ditemukan:</strong> <span class="judol-tooltip-found-text">${m.matchedText}</span><br/>
-        <strong>Jumlah kemunculan:</strong> ${matchCount}<br/>
-        <strong>Waktu eksekusi:</strong> ${timeStr}<br/>
-      </div>
-    `;
-  });
-
-  const ocrMatches = matches.filter(m => m.algorithm === "OCR");
-  ocrMatches.forEach((m, idx) => {
-    const keywordLower = m.keyword.toLowerCase();
-    const statsMap = keyStat.get(keywordLower);
-    const ocrStat = statsMap?.get("OCR");
-    const matchCount = ocrStat ? ocrStat.matchCount : 1;
-    const timeStr = ocrStat ? `${ocrStat.executionTimeMs.toFixed(3)} ms` : "0.00 ms";
-
-    if (exactAlgs.length > 0 || regexMatches.length > 0 || fuzzyMatches.length > 0 || idx > 0) {
-      htmlContent += `<hr class="judol-tooltip-divider" />`;
-    }
-
-    htmlContent += `
-      <div class="judol-tooltip-section">
-        <span class="judol-tooltip-title judol-tooltip-title-fuzzy">OCR Gambar</span><br/>
-        <strong>Algoritma yang digunakan:</strong> OCR<br/>
-        <strong>Keyword:</strong> <code class="judol-tooltip-code">${m.keyword}</code><br/>
-        <strong>Teks OCR:</strong> <span class="judol-tooltip-found-text">${m.matchedText}</span><br/>
-        <strong>Jumlah kemunculan:</strong> ${matchCount}<br/>
-        <strong>Waktu eksekusi OCR:</strong> ${timeStr}<br/>
-      </div>
-    `;
-  });
-
-  return htmlContent;
+  return null;
 }
 
-export function bindTooltip(element: HTMLElement, matches: MatchResult[], keyStat: KeywordStats): void {
-  const tooltip = initTooltip();
-  tooltipDataByElement.set(element, { matches, keyStat });
+function generateTooltipContent(matches: MatchResult[]): string {
+  if (matches.length === 0) return "";
 
-  if (tooltipBoundElements.has(element)) {
-    return;
+
+  const keywordCounts = new Map<string, number>();
+  for (const m of matches) {
+    keywordCounts.set(m.keyword, (keywordCounts.get(m.keyword) ?? 0) + 1);
   }
 
-  tooltipBoundElements.add(element);
+  const uniqueKeywords = Array.from(keywordCounts.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
 
-  element.addEventListener("mouseenter", (e: MouseEvent) => {
-    const tooltipData = tooltipDataByElement.get(element);
-    if (!tooltipData) return;
+  const uniqueAlgorithms = Array.from(new Set(matches.map((m) => m.algorithm).filter(Boolean)));
 
-    tooltip.innerHTML = generateTooltipContent(tooltipData.matches, tooltipData.keyStat);
+  const algorithmTimeMap = new Map<string, number>();
+  for (const m of matches) {
+    if (m.algorithm && m.searchTime) {
+      const current = algorithmTimeMap.get(m.algorithm) || 0;
+      if (m.searchTime > current) {
+        algorithmTimeMap.set(m.algorithm, m.searchTime);
+      }
+    }
+  }
+  const totalExecutionTimeMs = Array.from(algorithmTimeMap.values())
+    .reduce((sum, t) => sum + t, 0);
+
+  const totalMatches = matches.length;
+
+  const keywordBadges = uniqueKeywords
+    .map(([kw, count]) => `<code class="judol-tooltip-code">${kw}</code> <small>(${count}x)</small>`)
+    .join(", ");
+
+  const characterImgUrl = chrome.runtime.getURL("images/megumi.png");
+
+  return `
+    <img src="${characterImgUrl}" class="judol-tooltip-character" alt="Mascot" />
+
+    <div class="judol-tooltip-section">
+      <span class="judol-tooltip-title">
+        Terdeteksi Konten Judol
+      </span>
+      <br/><br/>
+
+      <strong>Algoritma:</strong> ${uniqueAlgorithms.join(" & ")}<br/>
+      <strong>Keywords:</strong> ${keywordBadges}<br/>
+
+      <hr style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin:10px 0;" />
+
+      <strong>Total Kemunculan:</strong> ${totalMatches} match<br/>
+      <strong>Waktu Eksekusi:</strong> ${totalExecutionTimeMs.toFixed(3)} ms<br/>
+    </div>
+  `;
+}
+
+export function bindTooltip(
+  element: HTMLElement,
+  matches: MatchResult[]
+): void {
+  const tooltip = initTooltip();
+
+  if (elementListenersMap.has(element)) {
+    clearTooltip(element);
+  }
+
+  const mouseEnterHandler = (e: MouseEvent) => {
+    tooltip.innerHTML = generateTooltipContent(matches);
     tooltip.hidden = false;
     updatePosition(e);
-  });
+  };
 
-  element.addEventListener("mousemove", (e: MouseEvent) => {
+  const mouseMoveHandler = (e: MouseEvent) => {
     updatePosition(e);
-  });
+  };
 
-  element.addEventListener("mouseleave", () => {
+  const mouseLeaveHandler = () => {
     tooltip.hidden = true;
+  };
+
+  element.addEventListener("mouseenter", mouseEnterHandler);
+  element.addEventListener("mousemove", mouseMoveHandler);
+  element.addEventListener("mouseleave", mouseLeaveHandler);
+
+  elementListenersMap.set(element, {
+    mouseenter: mouseEnterHandler,
+    mousemove: mouseMoveHandler,
+    mouseleave: mouseLeaveHandler
   });
 }
 
 export function clearTooltip(element: HTMLElement): void {
-  tooltipDataByElement.delete(element);
+  const listeners = elementListenersMap.get(element);
+  if (!listeners) return;
+
+  element.removeEventListener("mouseenter", listeners.mouseenter);
+  element.removeEventListener("mousemove", listeners.mousemove);
+  element.removeEventListener("mouseleave", listeners.mouseleave);
+
+  elementListenersMap.delete(element);
+
+  if (tooltipElement) {
+    tooltipElement.hidden = true;
+  }
 }
 
 function updatePosition(e: MouseEvent): void {
   if (!tooltipElement) return;
-  
+
   const offsetForCursor = 15;
   let posX = e.pageX + offsetForCursor;
   let posY = e.pageY + offsetForCursor;
 
   const tooltipWidth = tooltipElement.offsetWidth;
+
   if (posX + tooltipWidth > window.innerWidth + window.scrollX) {
     posX = e.pageX - tooltipWidth - offsetForCursor;
   }

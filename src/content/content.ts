@@ -2,9 +2,10 @@ import { collectTextNodes } from "./dom";
 import type { TextNodeInfo } from "./dom";
 import { clearHighlights, highlightMatches} from "./highlighter";
 import { setContainerCensorBlur } from "./censor";
+import { bindTooltip, findTooltipTarget } from "./tooltip";
 import { applyOcrImageCensorship, clearOcrImageCensorship, scanImagesWithOcr } from "../ocr/ocr";
 import { searchAhoCorasickKeywords, searchKmpKeywords, searchBoyerMooreKeywords, searchRabinKarpKeywords, searchRegex, searchWeightedLevenshteinKeywords} from "../algorithms";
-import type { AlgorithmStats, KeywordStats, DomMatchResult, MatchResult, MatchingAlgorithm } from "../algorithms";
+import type { AlgorithmStats, DomMatchResult, MatchResult, MatchingAlgorithm } from "../algorithms";
 import { EXTENSION_NAME, MANUAL_RESCAN_MESSAGE_TYPE } from "../utils/constants";
 import { loadKeywords } from "../utils/keywordLoader";
 import { getSettings, saveSearchStats } from "../utils/storage";
@@ -59,14 +60,13 @@ interface TextScanSegment {
 export function scanTextNodesWithKmp(
   textNodes: readonly TextNodeInfo[],
   keywords: readonly string[],
-  keyStat: KeywordStats
 ): KmpDomScanResult {
   const matches: DomMatchResult[] = [];
   let comparisons = 0;
 
   for (const textNode of textNodes) {
     const normalizedText = normalizeTextForExactSearch(textNode.text);
-    const result = searchKmpKeywords(normalizedText, keywords, keyStat);
+    const result = searchKmpKeywords(normalizedText, keywords);
     comparisons += result.comparisons;
 
     for (const match of result.matches) {
@@ -91,14 +91,13 @@ export function scanTextNodesWithKmp(
 export function scanTextNodesWithBoyerMoore(
   textNodes: readonly TextNodeInfo[],
   keywords: readonly string[],
-  keyStat: KeywordStats
 ): BoyerMooreDomScanResult {
   const matches: DomMatchResult[] = [];
   let comparisons = 0;
 
   for (const textNode of textNodes) {
     const normalizedText = normalizeTextForExactSearch(textNode.text);
-    const result = searchBoyerMooreKeywords(normalizedText, keywords, keyStat);
+    const result = searchBoyerMooreKeywords(normalizedText, keywords);
     comparisons += result.comparisons;
 
     for (const match of result.matches) {
@@ -120,11 +119,11 @@ export function scanTextNodesWithBoyerMoore(
   };
 }
 
-export function scanTextNodesWithRegex(textNodes: readonly TextNodeInfo[], keyStat: KeywordStats): RegexDomScanResult {
+export function scanTextNodesWithRegex(textNodes: readonly TextNodeInfo[]): RegexDomScanResult {
   const matches: DomMatchResult[] = [];
 
   for (const textNode of textNodes) {
-    const regexMatches = searchRegex(textNode.text, keyStat);
+    const regexMatches = searchRegex(textNode.text);
 
     for (const match of regexMatches) {
       matches.push({
@@ -145,7 +144,6 @@ export function scanTextNodesWithRegex(textNodes: readonly TextNodeInfo[], keySt
 export function scanTextNodesWithWeightedLevenshtein(
   textNodes: readonly TextNodeInfo[],
   keywords: readonly string[],
-  keyStat: KeywordStats,
   exactMatches: readonly DomMatchResult[] = []
 ): WeightedLevenshteinDomScanResult {
   const matches: DomMatchResult[] = [];
@@ -154,7 +152,7 @@ export function scanTextNodesWithWeightedLevenshtein(
 
   for (const segment of textSegments) {
     const normalizedText = normalizeTextForExactSearch(segment.text);
-    const result = searchWeightedLevenshteinKeywords(normalizedText, keywords, keyStat);
+    const result = searchWeightedLevenshteinKeywords(normalizedText, keywords);
     comparisons += result.comparisons;
 
     for (const match of result.matches) {
@@ -266,14 +264,13 @@ function collectUnmatchedTextSegments(
 export function scanTextNodesWithAhoCorasick(
   textNodes: readonly TextNodeInfo[],
   keywords: readonly string[],
-  keyStat: KeywordStats
 ): AhoCorasickDomScanResult {
   const matches: DomMatchResult[] = [];
   let comparisons = 0;
 
   for (const textNode of textNodes) {
     const normalizedText = normalizeTextForExactSearch(textNode.text);
-    const result = searchAhoCorasickKeywords(normalizedText, keywords, keyStat);
+    const result = searchAhoCorasickKeywords(normalizedText, keywords);
     comparisons += result.comparisons;
 
     for (const match of result.matches) {
@@ -298,14 +295,13 @@ export function scanTextNodesWithAhoCorasick(
 export function scanTextNodesWithRabinKarp(
   textNodes: readonly TextNodeInfo[],
   keywords: readonly string[],
-  keyStat: KeywordStats
 ): RabinKarpDomScanResult {
   const matches: DomMatchResult[] = [];
   let   comparisons = 0;
 
   for (const textNode of textNodes) {
     const normalizedText = normalizeTextForExactSearch(textNode.text);
-    const result = searchRabinKarpKeywords(normalizedText, keywords, keyStat);
+    const result = searchRabinKarpKeywords(normalizedText, keywords);
     comparisons += result.comparisons;
 
     for (const match of result.matches) {
@@ -384,16 +380,15 @@ async function runSearch(settings: JudolSettings): Promise<void> {
 
   const keywords = await loadKeywords();
   const textNodes = collectTextNodes();
-  const keyStat: KeywordStats = new Map();
   const algorithmStats = createEmptyAlgorithmStats();
-  const { result: kmpResult, executionTimeMs: kmpExecutionTimeMs } = measureExecution(() => scanTextNodesWithKmp(textNodes, keywords, keyStat));
-  const { result: boyerMooreResult, executionTimeMs: boyerMooreExecutionTimeMs } = measureExecution(() => scanTextNodesWithBoyerMoore(textNodes, keywords, keyStat));
-  const { result: regexResult, executionTimeMs: regexExecutionTimeMs } = measureExecution(() => scanTextNodesWithRegex(textNodes, keyStat));
+  const { result: kmpResult, executionTimeMs: kmpExecutionTimeMs } = measureExecution(() => scanTextNodesWithKmp(textNodes, keywords));
+  const { result: boyerMooreResult, executionTimeMs: boyerMooreExecutionTimeMs } = measureExecution(() => scanTextNodesWithBoyerMoore(textNodes, keywords));
+  const { result: regexResult, executionTimeMs: regexExecutionTimeMs } = measureExecution(() => scanTextNodesWithRegex(textNodes));
   const { result: ahoResult, executionTimeMs: ahoExecutionTimeMs } = settings.ahoCorasickEnabled
-    ? measureExecution(() => scanTextNodesWithAhoCorasick(textNodes, keywords, keyStat))
+    ? measureExecution(() => scanTextNodesWithAhoCorasick(textNodes, keywords))
     : {result: null, executionTimeMs: null };
   const { result: rabinKarpResult, executionTimeMs: rabinKarpExecutionTimeMs } = settings.rabinKarpEnabled
-    ? measureExecution(() => scanTextNodesWithRabinKarp(textNodes, keywords, keyStat))
+    ? measureExecution(() => scanTextNodesWithRabinKarp(textNodes, keywords))
     : {result: null, executionTimeMs: null };
 
   addAlgorithmStats(algorithmStats, "KMP", kmpResult.matches.length, kmpExecutionTimeMs, kmpResult.comparisons);
@@ -438,7 +433,7 @@ async function runSearch(settings: JudolSettings): Promise<void> {
   let fuzzyExecutionTimeMs = 0;
   if (hasUnmatchedText) {
     const fuzzyExecution = measureExecution(() =>
-      scanTextNodesWithWeightedLevenshtein(textNodes, keywords, keyStat, exactMatches)
+      scanTextNodesWithWeightedLevenshtein(textNodes, keywords, exactMatches)
     );
     fuzzyResult = fuzzyExecution.result;
     fuzzyExecutionTimeMs = fuzzyExecution.executionTimeMs;
@@ -476,34 +471,35 @@ async function runSearch(settings: JudolSettings): Promise<void> {
     ...(fuzzyResult?.matches ?? [])
   ];
 
-  const highlightedCount = highlightMatches(allMatches, keyStat, settings.blurEnabled);
+  const wrapperToMatchesMap = highlightMatches(allMatches, settings.blurEnabled);
+  for (const [wrapperElement, matches] of wrapperToMatchesMap.entries()) {
+    bindTooltip(wrapperElement, matches);
+  }
+
   await saveSearchStats(window.location.href, buildStoredSearchStats(allMatches, algorithmStats));
 
   if (settings.ocrEnabled) {
-    void runOcrScan(searchId, keywords, keyStat, allMatches, algorithmStats).catch((error: unknown) => {
+    void runOcrScan(searchId, keywords, allMatches, algorithmStats).catch((error: unknown) => {
       console.error(`[${EXTENSION_NAME}] OCR scan failed`, error);
     });
   }
-
-  console.info(`[${EXTENSION_NAME}] highlighted ${highlightedCount} DOM matches`);
 }
 
 async function runOcrScan(
   searchId: number,
   keywords: readonly string[],
-  keyStat: KeywordStats,
   textMatches: readonly DomMatchResult[],
   algorithmStats: Partial<Record<MatchingAlgorithm, AlgorithmStats>>
 ): Promise<void> {
   const { result: ocrResult, executionTimeMs: ocrExecutionTimeMs } = await measureAsyncExecution(() =>
-    scanImagesWithOcr(keywords, keyStat)
+    scanImagesWithOcr(keywords)
   );
 
   if (searchId !== latestSearchId) {
     return;
   }
 
-  const ocrDetectedImageCount = applyOcrImageCensorship(ocrResult.matches, keyStat);
+  const ocrDetectedImageCount = applyOcrImageCensorship(ocrResult.matches);
   const ocrMatches: Array<{ match: MatchResult }> = ocrResult.matches;
   const updatedAlgorithmStats = {
     ...algorithmStats
