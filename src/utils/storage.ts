@@ -24,6 +24,7 @@ export interface StoredSearchStats {
 }
 
 export interface JudolSettings {
+  enabled: boolean;
   blurEnabled: boolean;
   ahoCorasickEnabled: boolean;
   rabinKarpEnabled: boolean;
@@ -31,6 +32,7 @@ export interface JudolSettings {
 }
 
 export const DEFAULT_SETTINGS: JudolSettings = {
+  enabled: true,
   blurEnabled: false,
   ahoCorasickEnabled: false,
   rabinKarpEnabled: false,

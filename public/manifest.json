@@ -3,7 +3,7 @@
   "name": "Judol Detector",
   "version": "0.1.0",
   "description": "Mendeteksi konten judi online pada halaman web.",
-  "permissions": ["storage"],
+  "permissions": ["storage", "activeTab"],
   "host_permissions": ["<all_urls>"],
   "action": {
     "default_popup": "popup.html",

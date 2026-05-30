@@ -5,15 +5,14 @@ import { setContainerCensorBlur } from "./censor";
 import { applyOcrImageCensorship, clearOcrImageCensorship, scanImagesWithOcr } from "../ocr/ocr";
 import { searchAhoCorasickKeywords, searchKmpKeywords, searchBoyerMooreKeywords, searchRabinKarpKeywords, searchRegex, searchWeightedLevenshteinKeywords} from "../algorithms";
 import type { AlgorithmStats, KeywordStats, DomMatchResult, MatchResult, MatchingAlgorithm } from "../algorithms";
-import { EXTENSION_NAME } from "../utils/constants";
+import { EXTENSION_NAME, MANUAL_RESCAN_MESSAGE_TYPE } from "../utils/constants";
 import { loadKeywords } from "../utils/keywordLoader";
 import { getSettings, saveSearchStats } from "../utils/storage";
 import type { JudolSettings, StoredSearchStats } from "../utils/storage";
 import { measureAsyncExecution, measureExecution } from "../utils/timer";
 import { normalizeTextForExactSearch } from "../utils/textNormalizer";
 
-const DOM_RESCAN_DEBOUNCE_MS = 800;
-const TOOLTIP_SELECTOR = "#ext-judol-tooltip, .judol-tooltip";
+let latestSearchId = 0;
 
 export interface KmpDomScanResult {
   matches: DomMatchResult[];
@@ -370,8 +369,18 @@ function buildStoredSearchStats(
 }
 
 async function runSearch(settings: JudolSettings): Promise<void> {
+  const searchId = latestSearchId + 1;
+  latestSearchId = searchId;
+
   clearHighlights();
   clearOcrImageCensorship();
+
+  if (!settings.enabled) {
+    setContainerCensorBlur(false);
+    await saveSearchStats(buildStoredSearchStats([], createEmptyAlgorithmStats()));
+    console.info(`[${EXTENSION_NAME}] search skipped because detection is disabled`);
+    return;
+  }
 
   const keywords = await loadKeywords();
   const textNodes = collectTextNodes();
@@ -468,111 +477,58 @@ async function runSearch(settings: JudolSettings): Promise<void> {
   ];
 
   const highlightedCount = highlightMatches(allMatches, keyStat, settings.blurEnabled);
-  let ocrMatches: Array<{ match: MatchResult }> = [];
-  let ocrDetectedImageCount = 0;
+  await saveSearchStats(buildStoredSearchStats(allMatches, algorithmStats));
 
   if (settings.ocrEnabled) {
-    const { result: ocrResult, executionTimeMs: ocrExecutionTimeMs } = await measureAsyncExecution(() =>
-      scanImagesWithOcr(keywords, keyStat)
-    );
-
-    ocrMatches = ocrResult.matches;
-    ocrDetectedImageCount = applyOcrImageCensorship(ocrResult.matches, keyStat);
-    addAlgorithmStats(algorithmStats, "OCR", ocrResult.matches.length, ocrExecutionTimeMs, ocrResult.comparisons);
-
-    console.info(
-      `[${EXTENSION_NAME}] OCR scan finished: ${ocrResult.detectedImageCount} detected images, ${ocrResult.scannedImageCount} scanned images, scan ${ocrExecutionTimeMs.toFixed(2)} ms`
-    );
+    void runOcrScan(searchId, keywords, keyStat, allMatches, algorithmStats).catch((error: unknown) => {
+      console.error(`[${EXTENSION_NAME}] OCR scan failed`, error);
+    });
   }
 
-  await saveSearchStats(buildStoredSearchStats([...allMatches, ...ocrMatches], algorithmStats));
-
-  console.info(`[${EXTENSION_NAME}] highlighted ${highlightedCount} DOM matches, ${ocrDetectedImageCount} OCR images`);
+  console.info(`[${EXTENSION_NAME}] highlighted ${highlightedCount} DOM matches`);
 }
 
-function getObserverRoot(): HTMLElement {
-  return document.body ?? document.documentElement;
-}
+async function runOcrScan(
+  searchId: number,
+  keywords: readonly string[],
+  keyStat: KeywordStats,
+  textMatches: readonly DomMatchResult[],
+  algorithmStats: Partial<Record<MatchingAlgorithm, AlgorithmStats>>
+): Promise<void> {
+  const { result: ocrResult, executionTimeMs: ocrExecutionTimeMs } = await measureAsyncExecution(() =>
+    scanImagesWithOcr(keywords, keyStat)
+  );
 
-function isElementInsideTooltip(element: Element): boolean {
-  return element.closest(TOOLTIP_SELECTOR) !== null;
-}
-
-function isNodeInsideTooltip(node: Node): boolean {
-  if (node instanceof Element) {
-    return isElementInsideTooltip(node);
+  if (searchId !== latestSearchId) {
+    return;
   }
 
-  return node.parentElement !== null && isElementInsideTooltip(node.parentElement);
-}
+  const ocrDetectedImageCount = applyOcrImageCensorship(ocrResult.matches, keyStat);
+  const ocrMatches: Array<{ match: MatchResult }> = ocrResult.matches;
+  const updatedAlgorithmStats = {
+    ...algorithmStats
+  };
 
-function isPageContentMutation(mutation: MutationRecord): boolean {
-  if (isNodeInsideTooltip(mutation.target)) {
-    return false;
-  }
+  addAlgorithmStats(updatedAlgorithmStats, "OCR", ocrResult.matches.length, ocrExecutionTimeMs, ocrResult.comparisons);
+  await saveSearchStats(buildStoredSearchStats([...textMatches, ...ocrMatches], updatedAlgorithmStats));
 
-  if (mutation.type === "characterData") {
-    return true;
-  }
-
-  for (const node of mutation.addedNodes) {
-    if (!isNodeInsideTooltip(node)) {
-      return true;
-    }
-  }
-
-  for (const node of mutation.removedNodes) {
-    if (!isNodeInsideTooltip(node)) {
-      return true;
-    }
-  }
-
-  return false;
+  console.info(
+    `[${EXTENSION_NAME}] OCR scan finished: ${ocrResult.detectedImageCount} detected images, ${ocrResult.scannedImageCount} scanned images, ${ocrDetectedImageCount} censored images, scan ${ocrExecutionTimeMs.toFixed(2)} ms`
+  );
 }
 
 async function initializeExtension(): Promise<void> {
   let currentSettings = await getSettings();
-  const observerRoot = getObserverRoot();
-  let rescanTimer: number | undefined;
   let isSearchRunning = false;
   let rerunAfterCurrentSearch = false;
 
-  const domObserver = new MutationObserver((mutations) => {
-    if (!mutations.some(isPageContentMutation)) {
-      return;
-    }
-
-    scheduleRescan("DOM changed");
-  });
-
-  const startObservingDom = (): void => {
-    domObserver.observe(observerRoot, {
-      childList: true,
-      characterData: true,
-      subtree: true
-    });
-  };
-
-  const stopObservingDom = (): void => {
-    domObserver.disconnect();
-  };
-
-  const clearScheduledRescan = (): void => {
-    if (rescanTimer !== undefined) {
-      window.clearTimeout(rescanTimer);
-      rescanTimer = undefined;
-    }
-  };
-
-  const runSearchWithObserverPaused = async (reason: string): Promise<void> => {
+  const runControlledSearch = async (reason: string): Promise<void> => {
     if (isSearchRunning) {
       rerunAfterCurrentSearch = true;
       return;
     }
 
     isSearchRunning = true;
-    clearScheduledRescan();
-    stopObservingDom();
 
     try {
       do {
@@ -582,23 +538,10 @@ async function initializeExtension(): Promise<void> {
       } while (rerunAfterCurrentSearch);
     } finally {
       isSearchRunning = false;
-      startObservingDom();
     }
   };
 
-  function scheduleRescan(reason: string): void {
-    clearScheduledRescan();
-
-    rescanTimer = window.setTimeout(() => {
-      rescanTimer = undefined;
-
-      void runSearchWithObserverPaused(reason).catch((error: unknown) => {
-        console.error(`[${EXTENSION_NAME}] auto-rescan failed`, error);
-      });
-    }, DOM_RESCAN_DEBOUNCE_MS);
-  }
-
-  await runSearchWithObserverPaused("initial load");
+  await runControlledSearch("initial load");
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== "local" || !changes.judolSettings?.newValue) {
@@ -606,11 +549,34 @@ async function initializeExtension(): Promise<void> {
     }
 
     currentSettings = changes.judolSettings.newValue as JudolSettings;
-    setContainerCensorBlur(currentSettings.blurEnabled);
+    setContainerCensorBlur(currentSettings.enabled && currentSettings.blurEnabled);
 
-    void runSearchWithObserverPaused("settings changed").catch((error: unknown) => {
+    void runControlledSearch("settings changed").catch((error: unknown) => {
       console.error(`[${EXTENSION_NAME}] rescan failed`, error);
     });
+  });
+
+  chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+    if (
+      typeof message !== "object" ||
+      message === null ||
+      (message as { type?: unknown }).type !== MANUAL_RESCAN_MESSAGE_TYPE
+    ) {
+      return false;
+    }
+
+    void getSettings()
+      .then((settings) => {
+        currentSettings = settings;
+        return runControlledSearch("manual rescan");
+      })
+      .then(() => sendResponse({ ok: true }))
+      .catch((error: unknown) => {
+        console.error(`[${EXTENSION_NAME}] manual rescan failed`, error);
+        sendResponse({ ok: false });
+      });
+
+    return true;
   });
 }
 
