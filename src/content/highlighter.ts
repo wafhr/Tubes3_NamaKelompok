@@ -32,10 +32,7 @@ export function clearHighlights(): void {
   document.body.normalize();
 }
 
-export function highlightMatches(
-  matches: DomMatchResult[], 
-  blurEnabled = false
-): Map<HTMLElement, MatchResult[]> {
+export function highlightMatches(matches: DomMatchResult[], blurEnabled = false): Map<HTMLElement, MatchResult[]> {
   const wrapperToMatchesMap = new Map<HTMLElement, MatchResult[]>();
   if (matches.length === 0) return wrapperToMatchesMap;
 
