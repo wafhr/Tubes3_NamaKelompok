@@ -14,6 +14,7 @@ export interface MatchResult {
   endIndex: number;
   matchedText: string;
   comparisons: number;
+  searchTime: number;
 }
 
 export interface AlgorithmStats {
@@ -28,10 +29,3 @@ export interface DomMatchResult {
   sourceText: string;
   match: MatchResult;
 }
-
-interface KeywordAlgorithmStats {
-  matchCount: number;       
-  executionTimeMs: number;  
-}
-
-export type KeywordStats = Map<string, Map<MatchingAlgorithm, KeywordAlgorithmStats>>;

@@ -1,5 +1,4 @@
-import type { KeywordStats, MatchResult } from "./types";
-import { measureExecution } from "../utils/timer";
+import type { MatchResult } from "./types";
 
 interface AhoCorasickNode {
   transitions: Map<string, number>;
@@ -100,6 +99,8 @@ function runAhoCorasickSearch(text: string, keywords: readonly string[]): AhoCor
   let currentNodeIndex = 0;
   let comparisons = 0;
 
+  let startTime = performance.now();
+
   for (let textIndex = 0; textIndex < text.length; textIndex += 1) {
     const character = text[textIndex];
     comparisons += 1;
@@ -116,14 +117,20 @@ function runAhoCorasickSearch(text: string, keywords: readonly string[]): AhoCor
       const endIndex = textIndex + 1;
       const startIndex = endIndex - keyword.length;
 
+      const endTime = performance.now();
+      const segmentDuration = endTime - startTime;
+
       matches.push({
         keyword,
         algorithm: "Aho-Corasick",
         startIndex,
         endIndex,
         matchedText: text.slice(startIndex, endIndex),
-        comparisons
+        comparisons,
+        searchTime: segmentDuration
       });
+
+      startTime = performance.now();
     }
   }
 
@@ -134,32 +141,14 @@ function runAhoCorasickSearch(text: string, keywords: readonly string[]): AhoCor
   };
 }
 
-export function searchAhoCorasickKeywords(text: string, keywords: readonly string[], keyStat: KeywordStats): AhoCorasickSearchResult {
+export function searchAhoCorasickKeywords(text: string, keywords: readonly string[]): AhoCorasickSearchResult {
   const automaton = buildAhoCorasickAutomaton(keywords);
   const matches: MatchResult[] = [];
   let comparisons = 0;
 
   for (const keyword of keywords) {
-    const { result, executionTimeMs: execTime } = measureExecution(() => runAhoCorasickSearch(text, [keyword]));
-
-    // tambah keyStat
-    if (result.matches.length > 0) {
-      const algoKey = "Aho-Corasick";
-
-      if (!keyStat.has(keyword)) keyStat.set(keyword, new Map());
-
-      const algoMap = keyStat.get(keyword)!;
-      const prevCount = algoMap.get(algoKey)?.matchCount ?? 0;
-      const prevTime = algoMap.get(algoKey)?.executionTimeMs ?? 0;
-
-      algoMap.set(algoKey, {
-        matchCount: prevCount + result.matches.length,
-        executionTimeMs: prevTime + execTime
-      });
-    }
-
+    const result = runAhoCorasickSearch(text, [keyword]);
     comparisons += result.comparisons;
-
     for (const match of result.matches) {
       matches.push(match);
     }
