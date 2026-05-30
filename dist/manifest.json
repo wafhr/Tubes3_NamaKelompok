@@ -3,11 +3,14 @@
   "name": "Judol Detector",
   "version": "0.1.0",
   "description": "Mendeteksi konten judi online pada halaman web.",
-  "permissions": ["storage"],
+  "permissions": ["storage", "activeTab"],
   "host_permissions": ["<all_urls>"],
   "action": {
     "default_popup": "popup.html",
     "default_title": "Judol Detector"
+  },
+  "background": {
+    "service_worker": "background.js"
   },
   "content_scripts": [
     {
@@ -20,6 +23,10 @@
   "web_accessible_resources": [
     {
       "resources": ["keywords/keyword.txt"],
+      "matches": ["<all_urls>"]
+    },
+    {
+      "resources": ["images/megumi.png"],
       "matches": ["<all_urls>"]
     }
   ]
