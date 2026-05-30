@@ -94,8 +94,7 @@ export function buildAhoCorasickAutomaton(keywords: readonly string[]): AhoCoras
   return { nodes };
 }
 
-function runAhoCorasickSearch(text: string, keywords: readonly string[]): AhoCorasickSearchResult {
-  const automaton = buildAhoCorasickAutomaton(keywords);
+function runAhoCorasickSearch(text: string, automaton: AhoCorasickAutomaton): AhoCorasickSearchResult {
   const matches: MatchResult[] = [];
   let currentNodeIndex = 0;
   let comparisons = 0;
@@ -136,38 +135,27 @@ function runAhoCorasickSearch(text: string, keywords: readonly string[]): AhoCor
 
 export function searchAhoCorasickKeywords(text: string, keywords: readonly string[], keyStat: KeywordStats): AhoCorasickSearchResult {
   const automaton = buildAhoCorasickAutomaton(keywords);
-  const matches: MatchResult[] = [];
-  let comparisons = 0;
+  const { result, executionTimeMs: execTime } = measureExecution(() => runAhoCorasickSearch(text, automaton));
+  const matchCountByKeyword = new Map<string, number>();
 
-  for (const keyword of keywords) {
-    const { result, executionTimeMs: execTime } = measureExecution(() => runAhoCorasickSearch(text, [keyword]));
-
-    // tambah keyStat
-    if (result.matches.length > 0) {
-      const algoKey = "Aho-Corasick";
-
-      if (!keyStat.has(keyword)) keyStat.set(keyword, new Map());
-
-      const algoMap = keyStat.get(keyword)!;
-      const prevCount = algoMap.get(algoKey)?.matchCount ?? 0;
-      const prevTime = algoMap.get(algoKey)?.executionTimeMs ?? 0;
-
-      algoMap.set(algoKey, {
-        matchCount: prevCount + result.matches.length,
-        executionTimeMs: prevTime + execTime
-      });
-    }
-
-    comparisons += result.comparisons;
-
-    for (const match of result.matches) {
-      matches.push(match);
-    }
+  for (const match of result.matches) {
+    matchCountByKeyword.set(match.keyword, (matchCountByKeyword.get(match.keyword) ?? 0) + 1);
   }
 
-  return {
-    matches,
-    comparisons,
-    automaton
-  };
+  for (const [keyword, matchCount] of matchCountByKeyword) {
+    const algoKey = "Aho-Corasick";
+
+    if (!keyStat.has(keyword)) keyStat.set(keyword, new Map());
+
+    const algoMap = keyStat.get(keyword)!;
+    const prevCount = algoMap.get(algoKey)?.matchCount ?? 0;
+    const prevTime = algoMap.get(algoKey)?.executionTimeMs ?? 0;
+
+    algoMap.set(algoKey, {
+      matchCount: prevCount + matchCount,
+      executionTimeMs: prevTime + execTime
+    });
+  }
+
+  return result;
 }
