@@ -4,7 +4,15 @@ import { clearHighlights, highlightMatches} from "./highlighter";
 import { setContainerCensorBlur } from "./censor";
 import { bindTooltip } from "./tooltip";
 import { applyOcrImageCensorship, clearOcrImageCensorship, scanImagesWithOcr } from "../ocr/ocr";
-import { searchAhoCorasickKeywords, searchKmpKeywords, searchBoyerMooreKeywords, searchRabinKarpKeywords, searchRegex, searchWeightedLevenshteinKeywords} from "../algorithms";
+import {
+  buildAhoCorasickAutomaton,
+  searchAhoCorasickKeywords,
+  searchKmpKeywords,
+  searchBoyerMooreKeywords,
+  searchRabinKarpKeywords,
+  searchRegex,
+  searchWeightedLevenshteinKeywords
+} from "../algorithms";
 import type { AlgorithmStats, DomMatchResult, MatchResult, MatchingAlgorithm } from "../algorithms";
 import { EXTENSION_NAME, MANUAL_RESCAN_MESSAGE_TYPE } from "../utils/constants";
 import { loadKeywords } from "../utils/keywordLoader";
@@ -267,10 +275,11 @@ export function scanTextNodesWithAhoCorasick(
 ): AhoCorasickDomScanResult {
   const matches: DomMatchResult[] = [];
   let comparisons = 0;
+  const automaton = buildAhoCorasickAutomaton(keywords);
 
   for (const textNode of textNodes) {
     const normalizedText = normalizeTextForExactSearch(textNode.text);
-    const result = searchAhoCorasickKeywords(normalizedText, keywords);
+    const result = searchAhoCorasickKeywords(normalizedText, automaton);
     comparisons += result.comparisons;
 
     for (const match of result.matches) {

@@ -93,8 +93,10 @@ export function buildAhoCorasickAutomaton(keywords: readonly string[]): AhoCoras
   return { nodes };
 }
 
-function runAhoCorasickSearch(text: string, keywords: readonly string[]): AhoCorasickSearchResult {
-  const automaton = buildAhoCorasickAutomaton(keywords);
+export function searchAhoCorasickKeywords(
+  text: string,
+  automaton: AhoCorasickAutomaton
+): AhoCorasickSearchResult {
   const matches: MatchResult[] = [];
   let currentNodeIndex = 0;
   let comparisons = 0;
@@ -131,26 +133,6 @@ function runAhoCorasickSearch(text: string, keywords: readonly string[]): AhoCor
       });
 
       startTime = performance.now();
-    }
-  }
-
-  return {
-    matches,
-    comparisons,
-    automaton
-  };
-}
-
-export function searchAhoCorasickKeywords(text: string, keywords: readonly string[]): AhoCorasickSearchResult {
-  const automaton = buildAhoCorasickAutomaton(keywords);
-  const matches: MatchResult[] = [];
-  let comparisons = 0;
-
-  for (const keyword of keywords) {
-    const result = runAhoCorasickSearch(text, [keyword]);
-    comparisons += result.comparisons;
-    for (const match of result.matches) {
-      matches.push(match);
     }
   }
 
