@@ -24,15 +24,19 @@ export interface StoredSearchStats {
 }
 
 export interface JudolSettings {
+  enabled: boolean;
   blurEnabled: boolean;
   ahoCorasickEnabled: boolean;
   rabinKarpEnabled: boolean;
+  ocrEnabled: boolean;
 }
 
 export const DEFAULT_SETTINGS: JudolSettings = {
+  enabled: true,
   blurEnabled: false,
   ahoCorasickEnabled: false,
-  rabinKarpEnabled: false
+  rabinKarpEnabled: false,
+  ocrEnabled: false
 };
 
 export async function getSettings(): Promise<JudolSettings> {

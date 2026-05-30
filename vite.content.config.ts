@@ -12,6 +12,11 @@ export default defineConfig({
       name: "JudolDetectorContent",
       formats: ["iife"],
       fileName: () => "content.js"
+    },
+    rollupOptions: {
+      output: {
+        inlineDynamicImports: true
+      }
     }
   }
 });

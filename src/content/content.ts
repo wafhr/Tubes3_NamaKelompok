@@ -2,14 +2,17 @@ import { collectTextNodes } from "./dom";
 import type { TextNodeInfo } from "./dom";
 import { clearHighlights, highlightMatches} from "./highlighter";
 import { setContainerCensorBlur } from "./censor";
+import { applyOcrImageCensorship, clearOcrImageCensorship, scanImagesWithOcr } from "../ocr/ocr";
 import { searchAhoCorasickKeywords, searchKmpKeywords, searchBoyerMooreKeywords, searchRabinKarpKeywords, searchRegex, searchWeightedLevenshteinKeywords} from "../algorithms";
-import type { AlgorithmStats, KeywordStats, DomMatchResult, MatchingAlgorithm } from "../algorithms";
-import { EXTENSION_NAME } from "../utils/constants";
+import type { AlgorithmStats, KeywordStats, DomMatchResult, MatchResult, MatchingAlgorithm } from "../algorithms";
+import { EXTENSION_NAME, MANUAL_RESCAN_MESSAGE_TYPE } from "../utils/constants";
 import { loadKeywords } from "../utils/keywordLoader";
 import { getSettings, saveSearchStats } from "../utils/storage";
 import type { JudolSettings, StoredSearchStats } from "../utils/storage";
-import { measureExecution } from "../utils/timer";
+import { measureAsyncExecution, measureExecution } from "../utils/timer";
 import { normalizeTextForExactSearch } from "../utils/textNormalizer";
+
+let latestSearchId = 0;
 
 export interface KmpDomScanResult {
   matches: DomMatchResult[];
@@ -45,6 +48,12 @@ export interface RabinKarpDomScanResult {
   matches: DomMatchResult[];
   comparisons: number;
   scannedNodeCount: number;
+}
+
+interface TextScanSegment {
+  node: Text;
+  text: string;
+  startIndex: number;
 }
 
 export function scanTextNodesWithKmp(
@@ -136,23 +145,31 @@ export function scanTextNodesWithRegex(textNodes: readonly TextNodeInfo[], keySt
 export function scanTextNodesWithWeightedLevenshtein(
   textNodes: readonly TextNodeInfo[],
   keywords: readonly string[],
-  keyStat: KeywordStats
+  keyStat: KeywordStats,
+  exactMatches: readonly DomMatchResult[] = []
 ): WeightedLevenshteinDomScanResult {
   const matches: DomMatchResult[] = [];
   let comparisons = 0;
+  const textSegments = collectUnmatchedTextSegments(textNodes, exactMatches);
 
-  for (const textNode of textNodes) {
-    const normalizedText = normalizeTextForExactSearch(textNode.text);
+  for (const segment of textSegments) {
+    const normalizedText = normalizeTextForExactSearch(segment.text);
     const result = searchWeightedLevenshteinKeywords(normalizedText, keywords, keyStat);
     comparisons += result.comparisons;
 
     for (const match of result.matches) {
+      const startIndex = segment.startIndex + match.startIndex;
+      const endIndex = segment.startIndex + match.endIndex;
+      const sourceText = segment.node.data ?? segment.text;
+
       matches.push({
-        node: textNode.node,
-        sourceText: textNode.text,
+        node: segment.node,
+        sourceText,
         match: {
           ...match,
-          matchedText: textNode.text.slice(match.startIndex, match.endIndex)
+          startIndex,
+          endIndex,
+          matchedText: sourceText.slice(startIndex, endIndex)
         }
       });
     }
@@ -163,6 +180,87 @@ export function scanTextNodesWithWeightedLevenshtein(
     comparisons,
     scannedNodeCount: textNodes.length
   };
+}
+
+function collectUnmatchedTextSegments(
+  textNodes: readonly TextNodeInfo[],
+  exactMatches: readonly DomMatchResult[]
+): TextScanSegment[] {
+  if (exactMatches.length === 0) {
+    return textNodes.map((textNode) => ({
+      node: textNode.node,
+      text: textNode.text,
+      startIndex: 0
+    }));
+  }
+
+  const exactRangesByNode = new Map<Text, Array<{ startIndex: number; endIndex: number }>>();
+
+  for (const { node, match } of exactMatches) {
+    if (!exactRangesByNode.has(node)) {
+      exactRangesByNode.set(node, []);
+    }
+
+    exactRangesByNode.get(node)!.push({
+      startIndex: match.startIndex,
+      endIndex: match.endIndex
+    });
+  }
+
+  const segments: TextScanSegment[] = [];
+
+  for (const textNode of textNodes) {
+    const ranges = exactRangesByNode.get(textNode.node);
+
+    if (!ranges || ranges.length === 0) {
+      segments.push({
+        node: textNode.node,
+        text: textNode.text,
+        startIndex: 0
+      });
+      continue;
+    }
+
+    const normalizedRanges = ranges
+      .map((range) => ({
+        startIndex: Math.max(0, Math.min(textNode.text.length, range.startIndex)),
+        endIndex: Math.max(0, Math.min(textNode.text.length, range.endIndex))
+      }))
+      .filter((range) => range.startIndex < range.endIndex)
+      .sort((left, right) => left.startIndex - right.startIndex || left.endIndex - right.endIndex);
+
+    let segmentStartIndex = 0;
+
+    for (const range of normalizedRanges) {
+      if (range.startIndex > segmentStartIndex) {
+        const text = textNode.text.slice(segmentStartIndex, range.startIndex);
+
+        if (text.trim().length > 0) {
+          segments.push({
+            node: textNode.node,
+            text,
+            startIndex: segmentStartIndex
+          });
+        }
+      }
+
+      segmentStartIndex = Math.max(segmentStartIndex, range.endIndex);
+    }
+
+    if (segmentStartIndex < textNode.text.length) {
+      const text = textNode.text.slice(segmentStartIndex);
+
+      if (text.trim().length > 0) {
+        segments.push({
+          node: textNode.node,
+          text,
+          startIndex: segmentStartIndex
+        });
+      }
+    }
+  }
+
+  return segments;
 }
 
 export function scanTextNodesWithAhoCorasick(
@@ -249,7 +347,7 @@ function addAlgorithmStats(
 }
 
 function buildStoredSearchStats(
-  matches: readonly DomMatchResult[],
+  matches: readonly Array<{ match: MatchResult }>,
   algorithmStats: Partial<Record<MatchingAlgorithm, AlgorithmStats>>
 ): StoredSearchStats {
   const keywordCounts = new Map<string, number>();
@@ -271,7 +369,18 @@ function buildStoredSearchStats(
 }
 
 async function runSearch(settings: JudolSettings): Promise<void> {
+  const searchId = latestSearchId + 1;
+  latestSearchId = searchId;
+
   clearHighlights();
+  clearOcrImageCensorship();
+
+  if (!settings.enabled) {
+    setContainerCensorBlur(false);
+    await saveSearchStats(buildStoredSearchStats([], createEmptyAlgorithmStats()));
+    console.info(`[${EXTENSION_NAME}] search skipped because detection is disabled`);
+    return;
+  }
 
   const keywords = await loadKeywords();
   const textNodes = collectTextNodes();
@@ -317,16 +426,20 @@ async function runSearch(settings: JudolSettings): Promise<void> {
     );
   }
 
-  const totalExactMatches = 
-    kmpResult.matches.length + 
-    boyerMooreResult.matches.length + 
-    (ahoResult?.matches?.length ?? 0) + 
-    (rabinKarpResult?.matches?.length ?? 0);
+  const exactMatches = [
+    ...kmpResult.matches,
+    ...boyerMooreResult.matches,
+    ...(ahoResult?.matches ?? []),
+    ...(rabinKarpResult?.matches ?? [])
+  ];
+  const hasUnmatchedText = collectUnmatchedTextSegments(textNodes, exactMatches).length > 0;
 
   let fuzzyResult = null;
   let fuzzyExecutionTimeMs = 0;
-  if (totalExactMatches === 0) {
-    const fuzzyExecution = measureExecution(() => scanTextNodesWithWeightedLevenshtein(textNodes, keywords, keyStat));
+  if (hasUnmatchedText) {
+    const fuzzyExecution = measureExecution(() =>
+      scanTextNodesWithWeightedLevenshtein(textNodes, keywords, keyStat, exactMatches)
+    );
     fuzzyResult = fuzzyExecution.result;
     fuzzyExecutionTimeMs = fuzzyExecution.executionTimeMs;
 
@@ -339,7 +452,7 @@ async function runSearch(settings: JudolSettings): Promise<void> {
     );
     console.info(`[${EXTENSION_NAME}] Weighted Levenshtein search finished: ${fuzzyResult.matches.length} matches, execTime ${fuzzyExecutionTimeMs.toFixed(3)} ms`);
   } else {
-    console.info(`[${EXTENSION_NAME}] Weighted Levenshtein search skipped because exact matches were found`);
+    console.info(`[${EXTENSION_NAME}] Weighted Levenshtein search skipped because all text was covered by exact matches`);
   }
 
   console.info(
@@ -366,24 +479,104 @@ async function runSearch(settings: JudolSettings): Promise<void> {
   const highlightedCount = highlightMatches(allMatches, keyStat, settings.blurEnabled);
   await saveSearchStats(buildStoredSearchStats(allMatches, algorithmStats));
 
+  if (settings.ocrEnabled) {
+    void runOcrScan(searchId, keywords, keyStat, allMatches, algorithmStats).catch((error: unknown) => {
+      console.error(`[${EXTENSION_NAME}] OCR scan failed`, error);
+    });
+  }
+
   console.info(`[${EXTENSION_NAME}] highlighted ${highlightedCount} DOM matches`);
 }
 
+async function runOcrScan(
+  searchId: number,
+  keywords: readonly string[],
+  keyStat: KeywordStats,
+  textMatches: readonly DomMatchResult[],
+  algorithmStats: Partial<Record<MatchingAlgorithm, AlgorithmStats>>
+): Promise<void> {
+  const { result: ocrResult, executionTimeMs: ocrExecutionTimeMs } = await measureAsyncExecution(() =>
+    scanImagesWithOcr(keywords, keyStat)
+  );
+
+  if (searchId !== latestSearchId) {
+    return;
+  }
+
+  const ocrDetectedImageCount = applyOcrImageCensorship(ocrResult.matches, keyStat);
+  const ocrMatches: Array<{ match: MatchResult }> = ocrResult.matches;
+  const updatedAlgorithmStats = {
+    ...algorithmStats
+  };
+
+  addAlgorithmStats(updatedAlgorithmStats, "OCR", ocrResult.matches.length, ocrExecutionTimeMs, ocrResult.comparisons);
+  await saveSearchStats(buildStoredSearchStats([...textMatches, ...ocrMatches], updatedAlgorithmStats));
+
+  console.info(
+    `[${EXTENSION_NAME}] OCR scan finished: ${ocrResult.detectedImageCount} detected images, ${ocrResult.scannedImageCount} scanned images, ${ocrDetectedImageCount} censored images, scan ${ocrExecutionTimeMs.toFixed(2)} ms`
+  );
+}
+
 async function initializeExtension(): Promise<void> {
-  const settings = await getSettings();
-  await runSearch(settings);
+  let currentSettings = await getSettings();
+  let isSearchRunning = false;
+  let rerunAfterCurrentSearch = false;
+
+  const runControlledSearch = async (reason: string): Promise<void> => {
+    if (isSearchRunning) {
+      rerunAfterCurrentSearch = true;
+      return;
+    }
+
+    isSearchRunning = true;
+
+    try {
+      do {
+        rerunAfterCurrentSearch = false;
+        console.info(`[${EXTENSION_NAME}] search started: ${reason}`);
+        await runSearch(currentSettings);
+      } while (rerunAfterCurrentSearch);
+    } finally {
+      isSearchRunning = false;
+    }
+  };
+
+  await runControlledSearch("initial load");
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== "local" || !changes.judolSettings?.newValue) {
       return;
     }
 
-    const nextSettings = changes.judolSettings.newValue as JudolSettings;
-    setContainerCensorBlur(nextSettings.blurEnabled);
+    currentSettings = changes.judolSettings.newValue as JudolSettings;
+    setContainerCensorBlur(currentSettings.enabled && currentSettings.blurEnabled);
 
-    void runSearch(nextSettings).catch((error: unknown) => {
+    void runControlledSearch("settings changed").catch((error: unknown) => {
       console.error(`[${EXTENSION_NAME}] rescan failed`, error);
     });
+  });
+
+  chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+    if (
+      typeof message !== "object" ||
+      message === null ||
+      (message as { type?: unknown }).type !== MANUAL_RESCAN_MESSAGE_TYPE
+    ) {
+      return false;
+    }
+
+    void getSettings()
+      .then((settings) => {
+        currentSettings = settings;
+        return runControlledSearch("manual rescan");
+      })
+      .then(() => sendResponse({ ok: true }))
+      .catch((error: unknown) => {
+        console.error(`[${EXTENSION_NAME}] manual rescan failed`, error);
+        sendResponse({ ok: false });
+      });
+
+    return true;
   });
 }
 

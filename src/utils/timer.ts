@@ -17,3 +17,14 @@ export function measureExecution<T>(callback: () => T): TimedResult<T> {
     executionTimeMs: end - start
   };
 }
+
+export async function measureAsyncExecution<T>(callback: () => Promise<T>): Promise<TimedResult<T>> {
+  const start = nowMs();
+  const result = await callback();
+  const end = nowMs();
+
+  return {
+    result,
+    executionTimeMs: end - start
+  };
+}

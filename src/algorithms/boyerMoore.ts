@@ -70,7 +70,7 @@ export function searchBoyerMoore(text: string, keyword: string): BoyerMooreKeywo
                 comparisons: searchComparisons,
             });
 
-            textIndex += n;
+            textIndex += 1;
         } else {
             const x = lastOccurrence.get(text[textIndex + patternIndex]) ?? -1;
             const shift = Math.max(1, patternIndex - x);

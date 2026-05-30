@@ -7,6 +7,7 @@ import {
   SETTINGS_STORAGE_KEY
 } from "../utils/storage";
 import type { JudolSettings, StoredSearchStats } from "../utils/storage";
+import { MANUAL_RESCAN_MESSAGE_TYPE } from "../utils/constants";
 
 const MAX_VISIBLE_KEYWORDS = 10;
 const ALGORITHM_ORDER: MatchingAlgorithm[] = [
@@ -15,7 +16,8 @@ const ALGORITHM_ORDER: MatchingAlgorithm[] = [
   "Regex",
   "Aho-Corasick",
   "Rabin-Karp",
-  "Weighted Levenshtein"
+  "Weighted Levenshtein",
+  "OCR"
 ];
 
 function getElement<T extends HTMLElement>(id: string): T {
@@ -140,9 +142,13 @@ function renderStats(stats: StoredSearchStats | null): void {
 }
 
 function renderSettings(settings: JudolSettings): void {
+  getElement<HTMLInputElement>("enabled-toggle").checked = settings.enabled;
+  getElement<HTMLSpanElement>("enabled-toggle-label").textContent = settings.enabled ? "On" : "Off";
   getElement<HTMLInputElement>("blur-toggle").checked = settings.blurEnabled;
   getElement<HTMLInputElement>("aho-toggle").checked = settings.ahoCorasickEnabled;
   getElement<HTMLInputElement>("rabin-toggle").checked = settings.rabinKarpEnabled;
+  getElement<HTMLInputElement>("ocr-toggle").checked = settings.ocrEnabled;
+  getElement<HTMLButtonElement>("rescan-button").disabled = !settings.enabled;
 }
 
 async function updateSettings(patch: Partial<JudolSettings>): Promise<void> {
@@ -154,6 +160,13 @@ async function updateSettings(patch: Partial<JudolSettings>): Promise<void> {
 }
 
 function bindSettingsControls(): void {
+  getElement<HTMLInputElement>("enabled-toggle").addEventListener("change", (event) => {
+    const enabled = (event.currentTarget as HTMLInputElement).checked;
+
+    getElement<HTMLSpanElement>("enabled-toggle-label").textContent = enabled ? "On" : "Off";
+    void updateSettings({ enabled });
+  });
+
   getElement<HTMLInputElement>("blur-toggle").addEventListener("change", (event) => {
     void updateSettings({ blurEnabled: (event.currentTarget as HTMLInputElement).checked });
   });
@@ -165,6 +178,48 @@ function bindSettingsControls(): void {
   getElement<HTMLInputElement>("rabin-toggle").addEventListener("change", (event) => {
     void updateSettings({ rabinKarpEnabled: (event.currentTarget as HTMLInputElement).checked });
   });
+
+  getElement<HTMLInputElement>("ocr-toggle").addEventListener("change", (event) => {
+    void updateSettings({ ocrEnabled: (event.currentTarget as HTMLInputElement).checked });
+  });
+}
+
+async function requestManualRescan(): Promise<void> {
+  const settings = await getSettings();
+
+  if (!settings.enabled) {
+    return;
+  }
+
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+  if (activeTab?.id === undefined) {
+    return;
+  }
+
+  const response = await chrome.tabs.sendMessage(activeTab.id, { type: MANUAL_RESCAN_MESSAGE_TYPE });
+
+  if ((response as { ok?: boolean } | undefined)?.ok === false) {
+    throw new Error("Content script rejected manual rescan");
+  }
+}
+
+function bindRescanControl(): void {
+  const rescanButton = getElement<HTMLButtonElement>("rescan-button");
+
+  rescanButton.addEventListener("click", () => {
+    rescanButton.disabled = true;
+
+    void requestManualRescan()
+      .then(async () => {
+        const settings = await getSettings();
+        rescanButton.disabled = !settings.enabled;
+      })
+      .catch((error: unknown) => {
+        console.error("[Judol Detector] manual rescan failed", error);
+        rescanButton.disabled = false;
+      });
+  });
 }
 
 async function initializePopup(): Promise<void> {
@@ -173,6 +228,7 @@ async function initializePopup(): Promise<void> {
   renderSettings(settings);
   renderStats(stats);
   bindSettingsControls();
+  bindRescanControl();
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== "local") {
