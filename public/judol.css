@@ -8,21 +8,49 @@
   transition: background-color 0.2s ease;
 }
 
+#ext-judol-tooltip,
+#ext-judol-tooltip * {
+  color: #ffffff !important;
+  font-family: system-ui, "Segoe UI", Roboto, sans-serif !important;
+  font-size: 11px !important;
+  line-height: 1.5 !important;
+  text-align: left !important;
+}
+
 .judol-tooltip {
   position: absolute;
-  z-index: 2147483647;
-  max-width: 280px;
-  min-width: 220px;
-  padding: 8px 10px;
-  border: 1px solid rgba(28, 28, 28, 0.14);
-  border-radius: 6px;
-  background-color: #1f2933;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
-  color: #ffffff;
-  font-family: Arial, Helvetica, sans-serif;
-  font-size: 12px;
-  line-height: 1.4;
+  z-index: 999999;
+  background: rgba(18, 18, 24, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;    
+  padding: 10px 12px;     
+  font-size: 12px;        
+  min-width: 175px;       
+  max-width: 240px;       
+  white-space: normal;    
+  word-break: break-word; 
+  
+  overflow: visible; 
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5);
+}
+
+.judol-tooltip-character {
+  position: absolute;
+  top: -45px;   
+  right: -30px;
+  width: 70px;  
+  height: auto;
+  object-fit: contain;
+  z-index: 1000000; 
   pointer-events: none;
+}
+
+.judol-tooltip-code {
+  background: rgba(255, 74, 74, 0.15);
+  color: #ff6b6b !important;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
 }
 
 .judol-tooltip[hidden] {
@@ -39,26 +67,6 @@
 
 .judol-tooltip-title {
   font-weight: 700;
-}
-
-.judol-tooltip-title-exact {
-  color: #ff6b35;
-}
-
-.judol-tooltip-title-regex {
-  color: #ffd166;
-}
-
-.judol-tooltip-title-fuzzy {
-  color: #66d9ef;
-}
-
-.judol-tooltip-code {
-  padding: 2px 4px;
-  border-radius: 4px;
-  background-color: rgba(255, 255, 255, 0.12);
-  color: inherit;
-  font-family: Consolas, Monaco, monospace;
 }
 
 .judol-tooltip-found-text {

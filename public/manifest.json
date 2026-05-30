@@ -21,6 +21,10 @@
     {
       "resources": ["keywords/keyword.txt"],
       "matches": ["<all_urls>"]
+    },
+    {
+      "resources": ["images/megumi.png"],
+      "matches": ["<all_urls>"]
     }
   ]
 }
