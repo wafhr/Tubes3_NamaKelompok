@@ -5,7 +5,7 @@ import { normalizeTextForExactSearch } from "../utils/textNormalizer";
 import { nowMs } from "../utils/timer";
 
 const OCR_LANGUAGE = "eng";
-const OCR_MAX_IMAGES_PER_SCAN = 16;
+const OCR_MAX_IMAGES_PER_SCAN = 100;
 const OCR_MIN_IMAGE_WIDTH = 80;
 const OCR_MIN_IMAGE_HEIGHT = 40;
 const OCR_DETECTED_CLASS = "judol-ocr-detected";
@@ -73,12 +73,6 @@ function isScannableImage(image: HTMLImageElement): boolean {
 function collectScannableImages(): HTMLImageElement[] {
   return Array.from(document.images)
     .filter(isScannableImage)
-    .sort((left, right) => {
-      const leftRect = left.getBoundingClientRect();
-      const rightRect = right.getBoundingClientRect();
-
-      return rightRect.width * rightRect.height - leftRect.width * leftRect.height;
-    })
     .slice(0, OCR_MAX_IMAGES_PER_SCAN);
 }
 
