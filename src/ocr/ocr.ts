@@ -151,12 +151,6 @@ function isScannableImage(image: HTMLImageElement): boolean {
 function collectScannableImages(): HTMLImageElement[] {
   return Array.from(document.images)
     .filter(isScannableImage)
-    .sort((left, right) => {
-      const leftRect = left.getBoundingClientRect();
-      const rightRect = right.getBoundingClientRect();
-
-      return rightRect.width * rightRect.height - leftRect.width * leftRect.height;
-    })
     .slice(0, OCR_MAX_IMAGES_PER_SCAN);
 }
 

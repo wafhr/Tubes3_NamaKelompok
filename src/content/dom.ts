@@ -6,6 +6,15 @@ export interface TextNodeInfo {
   text: string;
 }
 
+const EXTENSION_TEXT_SELECTOR = [
+  "#ext-judol-tooltip",
+  ".judol-tooltip",
+  ".judol-text-node-wrapper",
+  ".judol-highlight",
+  "[data-judol-ocr-censored]",
+  "[data-judol-censored]"
+].join(",");
+
 function shouldSkipTextNode(node: Text): boolean {
   const parent = node.parentElement;
 
@@ -13,7 +22,7 @@ function shouldSkipTextNode(node: Text): boolean {
     return true;
   }
 
-  return SKIPPED_TEXT_PARENT_TAGS.has(parent.tagName);
+  return SKIPPED_TEXT_PARENT_TAGS.has(parent.tagName) || parent.closest(EXTENSION_TEXT_SELECTOR) !== null;
 }
 
 export function collectTextNodes(root: ParentNode = document.body): TextNodeInfo[] {
